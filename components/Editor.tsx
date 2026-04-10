@@ -239,8 +239,9 @@ ${research || '未搜索到相关资料，请根据话题自行构思'}
         .filter((line) => line.length >= 4);
       updateArticle(article.id, { outline });
       showToast('大纲生成完成', 'success');
-    } catch {
-      showToast('生成大纲失败，请检查 API 设置', 'error');
+    } catch (e: any) {
+      console.error('生成大纲错误:', e);
+      showToast('生成大纲失败，请检查 API 设置: ' + (e?.message || ''), 'error');
     } finally {
       setLoading(false);
     }

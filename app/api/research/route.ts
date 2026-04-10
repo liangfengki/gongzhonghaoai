@@ -1,5 +1,7 @@
 import { NextResponse } from 'next/server';
 
+export const maxDuration = 60; // Max timeout for search and parse
+
 interface SearchResult {
   title: string;
   snippet: string;

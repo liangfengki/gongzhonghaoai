@@ -1,5 +1,7 @@
 import { NextResponse } from 'next/server';
 
+export const maxDuration = 60; // Max timeout for image generation
+
 // Extract image from API response
 function extractImage(data: Record<string, unknown>): string | null {
   // Standard images/generations response

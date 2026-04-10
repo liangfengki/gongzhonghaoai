@@ -2,6 +2,8 @@ import { NextRequest } from 'next/server';
 import { STATIC_AUTH_CODES } from '@/lib/auth-codes';
 import { checkCodeUsage, incrementUsage } from '@/lib/usage-tracker';
 
+export const maxDuration = 60; // Set max duration for Vercel Serverless Function
+
 // Removed mock functions as we use real API exclusively
 
 export async function POST(req: NextRequest) {
