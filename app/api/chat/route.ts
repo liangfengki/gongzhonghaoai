@@ -81,8 +81,8 @@ export async function POST(req: NextRequest) {
           lastError = errorText.slice(0, 300) || `API Error ${upstream.status}`;
         }
 
-        // Retry on 429 (rate limit) or 503 (overloaded)
-        if (upstream.status === 429 || upstream.status === 503) {
+        // Retry on 429 (rate limit) or 50x (server errors/overloaded)
+        if (upstream.status === 429 || upstream.status >= 500) {
           console.error(`API attempt ${attempt + 1} failed (${upstream.status}): ${lastError}, retrying...`);
           await new Promise(r => setTimeout(r, 2000 * (attempt + 1)));
           continue;
