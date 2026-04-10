@@ -30,40 +30,53 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    let apiKey = settings?.apiKey || process.env.CHAT_API_KEY || 'sk-xFfRUfw3BZ5FHHEBOPYcDPIYPkfgvXpr6VJivgDaLQvrrQye';
+    let isDefaultKey = false;
+    let apiKey = settings?.apiKey || process.env.CHAT_API_KEY || '';
     
-    // If apiKey is explicitly set to 'demo', ignore it and use the built-in real key
+    // If apiKey is explicitly set to 'demo' or empty, use the built-in pool
     if (apiKey === 'demo' || !apiKey) {
-      apiKey = process.env.CHAT_API_KEY || 'sk-xFfRUfw3BZ5FHHEBOPYcDPIYPkfgvXpr6VJivgDaLQvrrQye';
+      isDefaultKey = true;
     }
 
+    const FALLBACK_POOL = [
+      { model: 'gemini-3.1-flash-lite-preview', key: 'sk-xFfRUfw3BZ5FHHEBOPYcDPIYPkfgvXpr6VJivgDaLQvrrQye' },
+      { model: 'gpt-5.4-nano', key: 'sk-pcpkl5tlZEPigl9JZ6EivlQZncvF1BLIwgFJn3WZYDX5krtW' },
+      { model: 'grok-4.2', key: 'sk-yYkrqn32Q35HPIMNBTPHaLLiQsYjID6lJSQS2PnDcVg0KE61' }
+    ];
+
     const baseUrl = (settings?.baseUrl || process.env.NEXT_PUBLIC_CHAT_API_BASE_URL || 'https://yunwu.ai/v1').replace(/\/+$/, '');
-    const model = settings?.modelName || process.env.CHAT_MODEL_NAME || 'gemini-3.1-flash-lite-preview';
-
-    // Real API call with retry for 429 errors
     const endpoint = `${baseUrl}/chat/completions`;
-
-    const body = {
-      model,
-      messages: messages.map((msg: { role: string; content: string }) => ({
-        role: msg.role,
-        content: (msg.content || '').replace(/\0/g, '').trim() || '请继续',
-      })),
-      temperature: 0.7,
-      max_tokens: 8192,
-      stream,
-    };
-
-    const headers: Record<string, string> = {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${apiKey}`,
-    };
 
     let upstream: Response | null = null;
     let lastError = '';
 
     for (let attempt = 0; attempt < 3; attempt++) {
       try {
+        let currentModel = settings?.modelName || process.env.CHAT_MODEL_NAME || 'gemini-3.1-flash-lite-preview';
+        let currentKey = apiKey;
+
+        if (isDefaultKey) {
+          const poolConfig = FALLBACK_POOL[attempt % FALLBACK_POOL.length];
+          currentModel = poolConfig.model;
+          currentKey = poolConfig.key;
+        }
+
+        const body = {
+          model: currentModel,
+          messages: messages.map((msg: { role: string; content: string }) => ({
+            role: msg.role,
+            content: (msg.content || '').replace(/\0/g, '').trim() || '请继续',
+          })),
+          temperature: 0.7,
+          max_tokens: 8192,
+          stream,
+        };
+
+        const headers: Record<string, string> = {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${currentKey}`,
+        };
+
         upstream = await fetch(endpoint, {
           method: 'POST',
           headers,
