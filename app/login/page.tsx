@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 
 export default function LoginPage() {
   const [mode, setMode] = useState<'login' | 'register'>('login');
@@ -12,10 +12,15 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const router = useRouter();
+  const searchParams = useSearchParams();
 
   useEffect(() => {
+    const errParam = searchParams.get('err');
+    if (errParam) {
+      setError(`验证失败: ${errParam}`);
+    }
     fetch('/api/auth/logout', { method: 'POST' });
-  }, []);
+  }, [searchParams]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -51,7 +56,6 @@ export default function LoginPage() {
       window.location.href = '/';
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : '操作失败，请检查网络');
-    } finally {
       setLoading(false);
     }
   };

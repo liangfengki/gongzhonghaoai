@@ -6,18 +6,23 @@ const secret = new TextEncoder().encode(
   process.env.JWT_SECRET || '01agent-jwt-secret-key-2024-muka-ai-very-long-random-string-fallback'
 );
 
-async function verifyToken(token: string) {
-  try {
-    const { payload } = await jwtVerify(token, secret);
-    return payload;
-  } catch {
-    return null;
-  }
-}
+
 
 export async function middleware(request: NextRequest) {
   const token = request.cookies.get('auth_token')?.value;
-  const payload = token ? await verifyToken(token) : null;
+  let verifyError = 'none';
+  let payload = null;
+
+  if (token) {
+    try {
+      const { payload: p } = await jwtVerify(token, secret);
+      payload = p;
+    } catch (e: any) {
+      verifyError = e.message || 'verify_failed';
+    }
+  } else {
+    verifyError = 'no_token_cookie';
+  }
 
   const pathname = request.nextUrl.pathname;
   const isAuthRoute = pathname.startsWith('/login') || pathname.startsWith('/api/auth');
@@ -25,9 +30,9 @@ export async function middleware(request: NextRequest) {
 
   if (!payload && !isAuthRoute) {
     if (pathname.startsWith('/api/')) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+      return NextResponse.json({ error: 'Unauthorized', detail: verifyError }, { status: 401 });
     }
-    return NextResponse.redirect(new URL('/login', request.url));
+    return NextResponse.redirect(new URL(`/login?err=${verifyError}`, request.url));
   }
 
   if (payload && pathname === '/login') {
