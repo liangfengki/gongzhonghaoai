@@ -4,9 +4,7 @@ import { prisma } from '@/lib/prisma';
 
 export const maxDuration = 60;
 const HARDCODED_CHAT_KEY = 'sk-xFfRUfw3BZ5FHHEBOPYcDPIYPkfgvXpr6VJivgDaLQvrrQye';
-const HARDCODED_IMAGE_KEY = 'sk-WyOMWvdkpnYR6tATd3cjOHi8TkzeHEMhPRxRR6acXhC5SkGy'; // Set max duration for Vercel Serverless Function
-const HARDCODED_CHAT_KEY = 'sk-xFfRUfw3BZ5FHHEBOPYcDPIYPkfgvXpr6VJivgDaLQvrrQye';
-const HARDCODED_IMAGE_KEY = 'sk-WyOMWvdkpnYR6tATd3cjOHi8TkzeHEMhPRxRR6acXhC5SkGy';
+const HARDCODED_IMAGE_KEY = 'sk-WyOMWvdkpnYR6tATd3cjOHi8TkzeHEMhPRxRR6acXhC5SkGy'; 
 const FALLBACK_POOL = [
   { model: process.env.FALLBACK_MODEL_1 || 'gemini-3.1-flash-lite-preview', key: process.env.FALLBACK_KEY_1 || '' },
   { model: process.env.FALLBACK_MODEL_2 || 'gpt-5.4-nano', key: process.env.FALLBACK_KEY_2 || '' },
