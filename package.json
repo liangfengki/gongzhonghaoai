@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "next dev --webpack -p 3535",
-    "build": "prisma generate && prisma db push && next build",
+    "build": "prisma generate && prisma db push && node seed.js && next build",
     "start": "next start",
     "lint": "eslint",
     "seed": "node seed.js",
