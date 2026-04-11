@@ -2,9 +2,10 @@ import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 import { jwtVerify } from 'jose';
 
-const secret = new TextEncoder().encode(
-  process.env.JWT_SECRET || '01agent-jwt-secret-key-2024-muka-ai-very-long-random-string-fallback'
-);
+const getSecret = () => {
+  const secretString = process.env.JWT_SECRET || '01agent-jwt-secret-key-2024-muka-ai-very-long-random-string-fallback';
+  return new TextEncoder().encode(secretString);
+};
 
 
 
@@ -15,7 +16,7 @@ export async function middleware(request: NextRequest) {
 
   if (token) {
     try {
-      const { payload: p } = await jwtVerify(token, secret);
+      const { payload: p } = await jwtVerify(token, getSecret());
       payload = p;
     } catch (e: any) {
       verifyError = e.message || 'verify_failed';
