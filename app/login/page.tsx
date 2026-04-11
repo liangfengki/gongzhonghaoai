@@ -48,8 +48,7 @@ export default function LoginPage() {
         throw new Error(data.error || (mode === 'login' ? '登录失败' : '注册失败'));
       }
 
-      router.push('/');
-      router.refresh();
+      window.location.href = '/';
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : '操作失败，请检查网络');
     } finally {
