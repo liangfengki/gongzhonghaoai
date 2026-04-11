@@ -1,6 +1,10 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
+import { requireAuth } from '@/lib/auth-helpers';
+import { prisma } from '@/lib/prisma';
 
 export const maxDuration = 60; // Max timeout for image generation
+
+const IMAGE_COST = 10;
 
 // Extract image from API response
 function extractImage(data: Record<string, unknown>): string | null {
@@ -50,16 +54,32 @@ function extractImage(data: Record<string, unknown>): string | null {
   return null;
 }
 
-export async function POST(req: Request) {
+export async function POST(req: NextRequest) {
+  let user;
+  try {
+    user = await requireAuth(req);
+  } catch (response) {
+    return response as Response;
+  }
+
   try {
     const { settings, prompt } = await req.json();
+
+    // Check credits
+    if (user.credits < IMAGE_COST) {
+      return NextResponse.json(
+        { error: { message: `生成图片需要 ${IMAGE_COST} 积分，当前仅剩 ${user.credits} 积分` } },
+        { status: 403 }
+      );
+    }
+
     const { imageBaseUrl, imageApiKey, imageModelName, apiKey, baseUrl } = settings;
 
-    let targetApiKey = imageApiKey || apiKey || process.env.IMAGE_API_KEY || 'sk-WyOMWvdkpnYR6tATd3cjOHi8TkzeHEMhPRxRR6acXhC5SkGy';
-    
+    let targetApiKey = imageApiKey || apiKey || process.env.IMAGE_API_KEY || '';
+
     // Force use built-in image API key if no valid custom key is provided
-    if (targetApiKey === 'demo' || !targetApiKey || targetApiKey === 'sk-xFfRUfw3BZ5FHHEBOPYcDPIYPkfgvXpr6VJivgDaLQvrrQye') {
-      targetApiKey = process.env.IMAGE_API_KEY || 'sk-WyOMWvdkpnYR6tATd3cjOHi8TkzeHEMhPRxRR6acXhC5SkGy';
+    if (targetApiKey === 'demo' || !targetApiKey) {
+      targetApiKey = process.env.IMAGE_API_KEY || '';
     }
     const targetBaseUrl = imageBaseUrl || baseUrl || process.env.NEXT_PUBLIC_IMAGE_API_BASE_URL || process.env.NEXT_PUBLIC_CHAT_API_BASE_URL || 'https://yunwu.ai/v1';
     const targetModel = imageModelName || process.env.IMAGE_MODEL_NAME || 'gemini-3.1-flash-image-preview';
@@ -113,6 +133,18 @@ export async function POST(req: Request) {
     const imageUrl = extractImage(data);
 
     if (imageUrl) {
+      // Deduct credits and log usage (atomic)
+      const result = await prisma.user.updateMany({
+        where: { id: user.id, credits: { gte: IMAGE_COST } },
+        data: { credits: { decrement: IMAGE_COST } },
+      });
+      if (result.count > 0) {
+        await prisma.usageLog.create({
+          data: { userId: user.id, type: 'image', creditsUsed: IMAGE_COST },
+        });
+        const updated = await prisma.user.findUnique({ where: { id: user.id }, select: { credits: true } });
+        return NextResponse.json({ data: [{ url: imageUrl }], remainingCredits: updated?.credits ?? 0 });
+      }
       return NextResponse.json({ data: [{ url: imageUrl }] });
     }
 

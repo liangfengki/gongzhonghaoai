@@ -3,25 +3,41 @@ generator client {
 }
 
 datasource db {
-  provider = "sqlite"
-  url      = "file:./dev.db"
+  provider          = "postgresql"
+  url               = env("DATABASE_URL")
+  shadowDatabaseUrl = env("SHADOW_DATABASE_URL")
+}
+
+model User {
+  id         String          @id @default(cuid())
+  username   String          @unique
+  email      String          @unique
+  password   String
+  credits    Int             @default(0)
+  isAdmin    Boolean         @default(false)
+  settings   UserSettings?
+  usageLogs  UsageLog[]
+  createdAt  DateTime        @default(now())
+  updatedAt  DateTime        @updatedAt
 }
 
 model UserSettings {
   id        String   @id @default(cuid())
   userId    String   @unique
+  user      User?    @relation(fields: [userId], references: [id], onDelete: Cascade)
   settings  String
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 }
 
-model AuthCode {
-  id         String    @id @default(cuid())
-  code       String    @unique
-  usageCount Int       @default(0)
-  maxUsage   Int       @default(10)
-  deviceId   String?
-  lastUsedAt DateTime?
-  createdAt  DateTime  @default(now())
-  updatedAt  DateTime  @updatedAt
+model UsageLog {
+  id          String   @id @default(cuid())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type        String   @default("article")
+  creditsUsed Int      @default(1)
+  createdAt   DateTime @default(now())
+
+  @@index([userId])
+  @@index([createdAt])
 }

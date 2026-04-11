@@ -1,55 +1,60 @@
-import { NextResponse } from 'next/server';
+import { NextResponse, NextRequest } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { requireAuth } from '@/lib/auth-helpers';
 
-export async function GET(req: Request) {
+function sanitizeSettings(raw: unknown) {
+  const settings = typeof raw === 'object' && raw !== null ? { ...(raw as Record<string, unknown>) } : {};
+  settings.apiKey = '';
+  settings.imageApiKey = '';
+  return settings;
+}
+
+export async function GET(req: NextRequest) {
   try {
-    // Get user ID from query params or headers
-    const url = new URL(req.url);
-    const userId = url.searchParams.get('userId') || 'default';
+    const user = await requireAuth(req);
 
     const settings = await prisma.userSettings.findUnique({
-      where: { userId },
+      where: { userId: user.id },
     });
 
     if (!settings) {
       return NextResponse.json({ settings: null });
     }
 
-    return NextResponse.json({ settings: JSON.parse(settings.settings) });
-  } catch (error) {
-    console.error('Error fetching settings:', error);
-    return NextResponse.json({ error: 'Failed to fetch settings' }, { status: 500 });
+    return NextResponse.json({ settings: sanitizeSettings(JSON.parse(settings.settings)) });
+  } catch (response) {
+    return response as Response;
   }
 }
 
-export async function POST(req: Request) {
+export async function POST(req: NextRequest) {
   try {
-    const { userId = 'default', settings } = await req.json();
+    const user = await requireAuth(req);
+    const { settings } = await req.json();
 
     if (!settings) {
       return NextResponse.json({ error: 'Settings are required' }, { status: 400 });
     }
 
-    const settingsString = JSON.stringify(settings);
+    const settingsString = JSON.stringify(sanitizeSettings(settings));
 
     const updatedSettings = await prisma.userSettings.upsert({
-      where: { userId },
+      where: { userId: user.id },
       update: {
         settings: settingsString,
         updatedAt: new Date(),
       },
       create: {
-        userId,
+        userId: user.id,
         settings: settingsString,
       },
     });
 
     return NextResponse.json({
       success: true,
-      settings: JSON.parse(updatedSettings.settings)
+      settings: sanitizeSettings(JSON.parse(updatedSettings.settings))
     });
-  } catch (error) {
-    console.error('Error saving settings:', error);
-    return NextResponse.json({ error: 'Failed to save settings' }, { status: 500 });
+  } catch (response) {
+    return response as Response;
   }
 }

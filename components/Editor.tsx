@@ -138,6 +138,12 @@ export default function Editor() {
   const [exhaustedMessage, setExhaustedMessage] = useState('');
   const [newCode, setNewCode] = useState('');
   const [replacingCode, setReplacingCode] = useState(false);
+  const actionLockRef = useRef({
+    outline: false,
+    fullText: false,
+    optimize: false,
+  });
+  const researchPromiseRef = useRef<Promise<string> | null>(null);
 
   // 监听授权码用完的自定义事件
   useEffect(() => {
@@ -188,29 +194,42 @@ export default function Editor() {
   }
 
   const doResearch = async (topic: string): Promise<string> => {
-    setResearching(true);
-    try {
-      const response = await fetch('/api/research', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ topic, settings }),
-      });
-      const data = await response.json();
-      if (data.success && data.research) {
-        setResearchData(data.research);
-        showToast('已搜索相关资料', 'success');
-        return data.research;
+    if (researchPromiseRef.current) {
+      return researchPromiseRef.current;
+    }
+    const task = (async () => {
+      setResearching(true);
+      try {
+        const response = await fetch('/api/research', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ topic, settings }),
+        });
+        const data = await response.json();
+        if (data.success && data.research) {
+          setResearchData(data.research);
+          showToast('已搜索相关资料', 'success');
+          return data.research;
+        }
+        return '';
+      } catch {
+        showToast('搜索资料失败，将直接生成', 'error');
+        return '';
+      } finally {
+        setResearching(false);
       }
-      return '';
-    } catch {
-      showToast('搜索资料失败，将直接生成', 'error');
-      return '';
+    })();
+    researchPromiseRef.current = task;
+    try {
+      return await task;
     } finally {
-      setResearching(false);
+      researchPromiseRef.current = null;
     }
   };
 
   const handleGenerateOutline = async () => {
+    if (actionLockRef.current.outline || loading) return;
+    actionLockRef.current.outline = true;
     setLoading(true);
     try {
       // Research first
@@ -244,10 +263,13 @@ ${research || '未搜索到相关资料，请根据话题自行构思'}
       showToast('生成大纲失败，请检查 API 设置: ' + (e?.message || ''), 'error');
     } finally {
       setLoading(false);
+      actionLockRef.current.outline = false;
     }
   };
 
   const handleGenerateFullText = async () => {
+    if (actionLockRef.current.fullText || loading) return;
+    actionLockRef.current.fullText = true;
     setLoading(true);
     setStreaming(true);
     try {
@@ -306,6 +328,7 @@ ${outline.map((o, i) => `${i + 1}. ${o}`).join('\n')}
     } finally {
       setLoading(false);
       setStreaming(false);
+      actionLockRef.current.fullText = false;
     }
   };
 
@@ -349,6 +372,8 @@ AI味：此外，该研究还发现，定期运动不仅能够有效改善心血
 请直接输出改写后的完整文章，不要添加任何解释、标注或步骤说明。`;
 
   const handleOptimizeArticle = async (instruction: string, count: number, images: ExtractedImage[], deaiInstruction?: string) => {
+    if (actionLockRef.current.optimize || loading) return;
+    actionLockRef.current.optimize = true;
     setLoading(true);
     setStreaming(true);
     try {
@@ -434,6 +459,7 @@ ${sourceContent}`;
     } finally {
       setLoading(false);
       setStreaming(false);
+      actionLockRef.current.optimize = false;
     }
   };
 

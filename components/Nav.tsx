@@ -1,17 +1,30 @@
 'use client';
 
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
-import { Sparkles, Settings, PenLine } from 'lucide-react';
+import { usePathname, useRouter } from 'next/navigation';
+import { Sparkles, Settings, PenLine, Shield, LogOut, Coins } from 'lucide-react';
+import { useUser } from '@/lib/use-user';
 
 export default function Nav() {
   const pathname = usePathname();
+  const router = useRouter();
+  const { user } = useUser();
 
   const links = [
     { href: '/', label: '选题', icon: Sparkles },
     { href: '/editor', label: '编辑器', icon: PenLine },
     { href: '/settings', label: '设置', icon: Settings },
   ];
+
+  if (user?.isAdmin) {
+    links.push({ href: '/admin', label: '管理', icon: Shield });
+  }
+
+  const handleLogout = async () => {
+    await fetch('/api/auth/logout', { method: 'POST' });
+    router.push('/login');
+    router.refresh();
+  };
 
   return (
     <header className="bg-white/80 backdrop-blur-xl sticky top-0 z-50 shadow-[0_1px_3px_rgba(0,0,0,0.04)]">
@@ -44,6 +57,25 @@ export default function Nav() {
             );
           })}
         </nav>
+
+        <div className="flex items-center gap-3">
+          {user && (
+            <>
+              <div className="flex items-center gap-1.5 px-3 py-1.5 bg-amber-50 text-amber-700 rounded-lg text-sm font-medium">
+                <Coins size={14} />
+                <span>{user.credits}</span>
+              </div>
+              <span className="text-sm text-gray-500">{user.username}</span>
+              <button
+                onClick={handleLogout}
+                className="p-2 text-gray-400 hover:text-gray-600 transition-colors rounded-lg hover:bg-gray-100"
+                title="退出登录"
+              >
+                <LogOut size={16} />
+              </button>
+            </>
+          )}
+        </div>
       </div>
     </header>
   );

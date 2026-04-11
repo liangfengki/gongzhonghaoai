@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { generateText } from '@/services/ai';
 import { useSettings } from '@/lib/settings';
 import { useArticleStore } from '@/lib/store';
@@ -18,6 +18,8 @@ export default function TopicSelector() {
   const [webSearchResults, setWebSearchResults] = useState<string[]>([]);
   const [webSearchLoading, setWebSearchLoading] = useState(false);
   const [webSearchQuery, setWebSearchQuery] = useState('');
+  const topicGenRequestIdRef = useRef(0);
+  const webSearchRequestIdRef = useRef(0);
   const { settings } = useSettings();
   const { addArticle } = useArticleStore();
   const router = useRouter();
@@ -48,57 +50,72 @@ export default function TopicSelector() {
   }, [loadTrendingTopics]);
 
   const performWebSearch = async (query: string) => {
-    if (!query) return;
+    const trimmed = query.trim();
+    if (!trimmed) return;
+    const requestId = ++webSearchRequestIdRef.current;
     setWebSearchLoading(true);
     setWebSearchResults([]);
     try {
       const response = await fetch('/api/search', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ query, limit: 10, settings }),
+        body: JSON.stringify({ query: trimmed, limit: 10, settings }),
       });
       const data = await response.json();
+      if (requestId !== webSearchRequestIdRef.current) return;
       if (data.success) {
         setWebSearchResults(data.topics);
       }
     } catch {
+      if (requestId !== webSearchRequestIdRef.current) return;
       showToast('搜索失败，请重试', 'error');
     } finally {
-      setWebSearchLoading(false);
+      if (requestId === webSearchRequestIdRef.current) {
+        setWebSearchLoading(false);
+      }
     }
   };
 
   const handleWebSearch = async () => {
+    if (webSearchLoading) return;
     await performWebSearch(webSearchQuery);
   };
 
   const handleWebSearchResult = (topic: string) => {
+    if (loading) return;
     setKeyword(topic);
     generateTopics(topic);
   };
 
   const generateTopics = async (targetKeyword: string) => {
-    if (!targetKeyword) return;
+    if (loading) return;
+    const trimmed = targetKeyword.trim();
+    if (!trimmed) return;
+    const requestId = ++topicGenRequestIdRef.current;
     setLoading(true);
     setSuggestions([]);
     try {
       const prompt = `
-        请根据关键词 "${targetKeyword}"，为微信公众号生成 5 个具有爆款潜力的选题标题。
+        请根据关键词 "${trimmed}"，为微信公众号生成 5 个具有爆款潜力的选题标题。
         要求：
         1. 标题吸引人，具有点击欲望。
         2. 覆盖不同角度（如：干货教程、行业洞察、情感共鸣）。
         3. 只返回标题列表，每行一个，不要带序号。
       `;
       const result = await generateText([{ role: 'user', content: prompt }], settings);
+      if (requestId !== topicGenRequestIdRef.current) return;
       const topics = result
         .split('\n')
         .filter((line) => line.trim().length > 0)
         .map((line) => line.replace(/^\d+\.\s*/, ''));
       setSuggestions(topics);
     } catch {
+      if (requestId !== topicGenRequestIdRef.current) return;
       showToast('生成选题失败，请检查 API 设置', 'error');
     } finally {
-      setLoading(false);
+      if (requestId === topicGenRequestIdRef.current) {
+        setLoading(false);
+      }
     }
   };
 

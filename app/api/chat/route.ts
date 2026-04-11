@@ -1,48 +1,37 @@
 import { NextRequest } from 'next/server';
-import { STATIC_AUTH_CODES } from '@/lib/auth-codes';
-import { checkCodeUsage, incrementUsage } from '@/lib/usage-tracker';
+import { requireAuth } from '@/lib/auth-helpers';
+import { prisma } from '@/lib/prisma';
 
 export const maxDuration = 60; // Set max duration for Vercel Serverless Function
-
-// Removed mock functions as we use real API exclusively
+const FALLBACK_POOL = [
+  { model: process.env.FALLBACK_MODEL_1 || 'gemini-3.1-flash-lite-preview', key: process.env.FALLBACK_KEY_1 || '' },
+  { model: process.env.FALLBACK_MODEL_2 || 'gpt-5.4-nano', key: process.env.FALLBACK_KEY_2 || '' },
+  { model: process.env.FALLBACK_MODEL_3 || 'grok-4.2', key: process.env.FALLBACK_KEY_3 || '' },
+] as const;
 
 export async function POST(req: NextRequest) {
+  let user;
   try {
-    const { messages, settings, stream = false } = await req.json();
+    user = await requireAuth(req);
+  } catch (response) {
+    return response as Response;
+  }
 
-    const lastMessage = messages?.[messages.length - 1]?.content || '';
-    const isGeneratingArticle = lastMessage.includes('撰写') || lastMessage.includes('正文') || lastMessage.includes('改写') || lastMessage.includes('优化');
+  try {
+    const { messages, settings, stream = false, creditsCost = 0 } = await req.json();
 
-    // Check Auth Code Limits
-    if (isGeneratingArticle) {
-      const authCodeValue = req.cookies.get('auth_code')?.value;
-      const codeUsageCookie = req.cookies.get('code_usage')?.value;
-
-      if (authCodeValue) {
-        if (!STATIC_AUTH_CODES.includes(authCodeValue)) {
-          return Response.json({ error: { message: '无效的授权码，请重新登录' } }, { status: 401 });
-        }
-
-        const usageCheck = checkCodeUsage(authCodeValue, codeUsageCookie);
-        if (!usageCheck.ok) {
-          return Response.json({ error: { message: usageCheck.error } }, { status: 403 });
-        }
+    // Check credits if this operation costs credits
+    if (creditsCost > 0) {
+      if (user.credits < creditsCost) {
+        return Response.json(
+          { error: { message: `积分不足，需要 ${creditsCost} 积分，当前仅剩 ${user.credits} 积分` } },
+          { status: 403 }
+        );
       }
     }
 
-    let isDefaultKey = false;
-    let apiKey = settings?.apiKey || process.env.CHAT_API_KEY || '';
-    
-    // If apiKey is explicitly set to 'demo' or empty, use the built-in pool
-    if (apiKey === 'demo' || !apiKey) {
-      isDefaultKey = true;
-    }
-
-    const FALLBACK_POOL = [
-      { model: 'gemini-3.1-flash-lite-preview', key: 'sk-xFfRUfw3BZ5FHHEBOPYcDPIYPkfgvXpr6VJivgDaLQvrrQye' },
-      { model: 'gpt-5.4-nano', key: 'sk-pcpkl5tlZEPigl9JZ6EivlQZncvF1BLIwgFJn3WZYDX5krtW' },
-      { model: 'grok-4.2', key: 'sk-yYkrqn32Q35HPIMNBTPHaLLiQsYjID6lJSQS2PnDcVg0KE61' }
-    ];
+    const apiKey = settings?.apiKey || process.env.CHAT_API_KEY || '';
+    const isDefaultKey = apiKey === 'demo' || !apiKey;
 
     const baseUrl = (settings?.baseUrl || process.env.NEXT_PUBLIC_CHAT_API_BASE_URL || 'https://yunwu.ai/v1').replace(/\/+$/, '');
     const endpoint = `${baseUrl}/chat/completions`;
@@ -94,8 +83,12 @@ export async function POST(req: NextRequest) {
           lastError = errorText.slice(0, 300) || `API Error ${upstream.status}`;
         }
 
-        // Retry on 429 (rate limit) or 50x (server errors/overloaded)
-        if (upstream.status === 429 || upstream.status >= 500) {
+        // Retry on 429 (rate limit) or 50x (server errors/overloaded) or specific proxy errors
+        const isProxyOverloaded = lastError.includes('负载已饱和') || lastError.includes('并发数') || lastError.includes('rate limit');
+        if (upstream.status === 429 || upstream.status >= 500 || isProxyOverloaded) {
+          if (isProxyOverloaded && attempt >= 1) {
+            break;
+          }
           console.error(`API attempt ${attempt + 1} failed (${upstream.status}): ${lastError}, retrying...`);
           await new Promise(r => setTimeout(r, 2000 * (attempt + 1)));
           continue;
@@ -117,13 +110,25 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Increment usage if successful
-    let updatedUsageCookie: string | null = null;
-    if (isGeneratingArticle) {
-      const authCodeValue = req.cookies.get('auth_code')?.value;
-      const codeUsageCookie = req.cookies.get('code_usage')?.value;
-      if (authCodeValue && STATIC_AUTH_CODES.includes(authCodeValue)) {
-        updatedUsageCookie = String(incrementUsage(codeUsageCookie));
+    // Deduct credits on success (atomic to prevent race conditions)
+    let remainingCredits: number | null = null;
+    if (creditsCost > 0) {
+      const result = await prisma.user.updateMany({
+        where: { id: user.id, credits: { gte: creditsCost } },
+        data: { credits: { decrement: creditsCost } },
+      });
+      if (result.count > 0) {
+        const updated = await prisma.user.findUnique({ where: { id: user.id }, select: { credits: true } });
+        remainingCredits = updated?.credits ?? null;
+        // Determine usage type for logging
+        const lastMessage = messages?.[messages.length - 1]?.content || '';
+        let logType = 'chat';
+        if (lastMessage.includes('大纲') || lastMessage.includes('outline')) logType = 'outline';
+        else if (lastMessage.includes('撰写') || lastMessage.includes('正文')) logType = 'article';
+        else if (lastMessage.includes('优化') || lastMessage.includes('改写')) logType = 'optimize';
+        await prisma.usageLog.create({
+          data: { userId: user.id, type: logType, creditsUsed: creditsCost },
+        });
       }
     }
 
@@ -133,17 +138,16 @@ export async function POST(req: NextRequest) {
         'Cache-Control': 'no-cache',
         Connection: 'keep-alive',
       };
-      if (updatedUsageCookie) {
-        headers['Set-Cookie'] = `code_usage=${updatedUsageCookie}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${60 * 60 * 24 * 30}`;
+      if (remainingCredits !== null) {
+        headers['X-Remaining-Credits'] = String(remainingCredits);
       }
       return new Response(upstream.body, { headers });
     }
 
     const data = await upstream.json();
-    const response = Response.json(data);
-    if (updatedUsageCookie && response instanceof Response) {
-      response.headers.append('Set-Cookie', `code_usage=${updatedUsageCookie}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${60 * 60 * 24 * 30}`);
-    }
+    const response = Response.json(
+      remainingCredits !== null ? { ...data, remainingCredits } : data
+    );
     return response;
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Internal Server Error';

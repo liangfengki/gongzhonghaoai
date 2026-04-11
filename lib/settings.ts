@@ -24,6 +24,15 @@ const DEFAULT_SETTINGS: AISettings = {
   imageModelName: 'gemini-3.1-flash-image-preview',
 };
 
+function sanitizeSettings(input?: Partial<AISettings> | null): AISettings {
+  return {
+    ...DEFAULT_SETTINGS,
+    ...input,
+    apiKey: '',
+    imageApiKey: '',
+  };
+}
+
 export const useSettings = () => {
   const [settings, setSettings] = useState<AISettings>(DEFAULT_SETTINGS);
   const [loading, setLoading] = useState(true);
@@ -35,12 +44,12 @@ export const useSettings = () => {
         const data = await response.json();
 
         if (data.settings) {
-          setSettings({ ...DEFAULT_SETTINGS, ...data.settings });
+          setSettings(sanitizeSettings(data.settings));
         } else {
           const saved = localStorage.getItem('01agent_settings');
           if (saved) {
             try {
-              setSettings({ ...DEFAULT_SETTINGS, ...JSON.parse(saved) });
+              setSettings(sanitizeSettings(JSON.parse(saved)));
             } catch (e) {
               console.error('Failed to parse settings', e);
             }
@@ -51,7 +60,7 @@ export const useSettings = () => {
         const saved = localStorage.getItem('01agent_settings');
         if (saved) {
           try {
-            setSettings({ ...DEFAULT_SETTINGS, ...JSON.parse(saved) });
+            setSettings(sanitizeSettings(JSON.parse(saved)));
           } catch (e) {
             console.error('Failed to parse settings', e);
           }
@@ -65,14 +74,15 @@ export const useSettings = () => {
   }, []);
 
   const saveSettings = async (newSettings: AISettings) => {
-    setSettings(newSettings);
-    localStorage.setItem('01agent_settings', JSON.stringify(newSettings));
+    const sanitized = sanitizeSettings(newSettings);
+    setSettings(sanitized);
+    localStorage.setItem('01agent_settings', JSON.stringify(sanitized));
 
     try {
       await fetch('/api/settings', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ userId: 'default', settings: newSettings }),
+        body: JSON.stringify({ settings: sanitized }),
       });
     } catch (error) {
       console.error('Failed to save settings to database:', error);

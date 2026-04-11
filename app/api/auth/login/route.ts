@@ -1,44 +1,41 @@
 import { NextResponse, NextRequest } from 'next/server';
-import { STATIC_AUTH_CODES } from '@/lib/auth-codes';
-import { validateCodeForLogin } from '@/lib/usage-tracker';
-import crypto from 'crypto';
+import { prisma } from '@/lib/prisma';
+import { createJWT } from '@/lib/jwt';
+import bcrypt from 'bcryptjs';
 
 export async function POST(req: NextRequest) {
   try {
-    const { code } = await req.json();
+    const { username, password } = await req.json();
 
-    if (!code) {
-      return NextResponse.json({ error: '请输入授权码' }, { status: 400 });
+    if (!username || !password) {
+      return NextResponse.json({ error: '请输入用户名和密码' }, { status: 400 });
     }
 
-    const existingUsageCookie = req.cookies.get('code_usage')?.value;
+    const user = await prisma.user.findFirst({
+      where: { OR: [{ username }, { email: username }] },
+    });
 
-    const result = validateCodeForLogin(code, existingUsageCookie);
-    if (!result.ok) {
-      return NextResponse.json({ error: result.error }, { status: 403 });
+    if (!user) {
+      return NextResponse.json({ error: '用户名或密码错误' }, { status: 401 });
     }
 
-    const deviceId = req.cookies.get('device_id')?.value || crypto.randomUUID();
+    const valid = await bcrypt.compare(password, user.password);
+    if (!valid) {
+      return NextResponse.json({ error: '用户名或密码错误' }, { status: 401 });
+    }
 
-    const response = NextResponse.json({ success: true });
-
-    response.cookies.set('auth_code', code, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'lax',
-      maxAge: 60 * 60 * 24 * 30,
-      path: '/',
+    const token = await createJWT({
+      userId: user.id,
+      username: user.username,
+      isAdmin: user.isAdmin,
     });
 
-    response.cookies.set('device_id', deviceId, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'lax',
-      maxAge: 60 * 60 * 24 * 300,
-      path: '/',
+    const response = NextResponse.json({
+      success: true,
+      user: { username: user.username, credits: user.credits, isAdmin: user.isAdmin },
     });
 
-    response.cookies.set('code_usage', String(result.currentUsage ?? 0), {
+    response.cookies.set('auth_token', token, {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
       sameSite: 'lax',

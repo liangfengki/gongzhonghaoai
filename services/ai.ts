@@ -6,11 +6,11 @@ export interface ChatMessage {
 }
 
 // Non-streaming text generation
-export async function generateText(messages: ChatMessage[], settings: AISettings): Promise<string> {
+export async function generateText(messages: ChatMessage[], settings: AISettings, creditsCost?: number): Promise<string> {
   const response = await fetch('/api/chat', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ messages, settings, stream: false }),
+    body: JSON.stringify({ messages, settings, stream: false, creditsCost: creditsCost || 0 }),
   });
 
   if (!response.ok) {
@@ -19,9 +19,6 @@ export async function generateText(messages: ChatMessage[], settings: AISettings
       if (typeof window !== 'undefined' && errorData.error?.message?.includes('重新登录')) {
         await fetch('/api/auth/logout', { method: 'POST' });
         window.location.href = '/login';
-      }
-      if (typeof window !== 'undefined' && errorData.error?.message?.includes('已用完')) {
-        window.dispatchEvent(new CustomEvent('auth-code-exhausted', { detail: { message: errorData.error.message } }));
       }
     }
     throw new Error(errorData.error?.message || `API 请求失败: ${response.status}`);
@@ -34,12 +31,13 @@ export async function generateText(messages: ChatMessage[], settings: AISettings
 // Streaming text generation - returns a Response for SSE consumption
 export async function generateTextStream(
   messages: ChatMessage[],
-  settings: AISettings
+  settings: AISettings,
+  creditsCost?: number
 ): Promise<Response> {
   const response = await fetch('/api/chat', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ messages, settings, stream: true }),
+    body: JSON.stringify({ messages, settings, stream: true, creditsCost: creditsCost || 0 }),
   });
 
   if (!response.ok) {
@@ -48,9 +46,6 @@ export async function generateTextStream(
       if (typeof window !== 'undefined' && errorData.error?.message?.includes('重新登录')) {
         await fetch('/api/auth/logout', { method: 'POST' });
         window.location.href = '/login';
-      }
-      if (typeof window !== 'undefined' && errorData.error?.message?.includes('已用完')) {
-        window.dispatchEvent(new CustomEvent('auth-code-exhausted', { detail: { message: errorData.error.message } }));
       }
     }
     throw new Error(errorData.error?.message || `API 请求失败: ${response.status}`);
