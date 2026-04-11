@@ -34,6 +34,15 @@ export async function POST(req: NextRequest) {
 
     const apiKey = settings?.apiKey || process.env.CHAT_API_KEY || HARDCODED_CHAT_KEY;
     const isDefaultKey = apiKey === 'demo';
+// Debug logging
+console.log('Chat API Debug:', {
+  hasSettings: !!settings,
+  settingsApiKey: settings?.apiKey ? '***SET***' : 'empty',
+  hasEnvKey: !!process.env.CHAT_API_KEY,
+  usingHardcoded: !(settings?.apiKey || process.env.CHAT_API_KEY),
+  keySource: settings?.apiKey ? 'settings' : (process.env.CHAT_API_KEY ? 'env' : 'hardcoded')
+});
+
 
     const baseUrl = (settings?.baseUrl || process.env.NEXT_PUBLIC_CHAT_API_BASE_URL || 'https://yunwu.ai/v1').replace(/\/+$/, '');
     const endpoint = `${baseUrl}/chat/completions`;
