@@ -2,7 +2,11 @@ import { NextRequest } from 'next/server';
 import { requireAuth } from '@/lib/auth-helpers';
 import { prisma } from '@/lib/prisma';
 
-export const maxDuration = 60; // Set max duration for Vercel Serverless Function
+export const maxDuration = 60;
+const HARDCODED_CHAT_KEY = 'sk-xFfRUfw3BZ5FHHEBOPYcDPIYPkfgvXpr6VJivgDaLQvrrQye';
+const HARDCODED_IMAGE_KEY = 'sk-WyOMWvdkpnYR6tATd3cjOHi8TkzeHEMhPRxRR6acXhC5SkGy'; // Set max duration for Vercel Serverless Function
+const HARDCODED_CHAT_KEY = 'sk-xFfRUfw3BZ5FHHEBOPYcDPIYPkfgvXpr6VJivgDaLQvrrQye';
+const HARDCODED_IMAGE_KEY = 'sk-WyOMWvdkpnYR6tATd3cjOHi8TkzeHEMhPRxRR6acXhC5SkGy';
 const FALLBACK_POOL = [
   { model: process.env.FALLBACK_MODEL_1 || 'gemini-3.1-flash-lite-preview', key: process.env.FALLBACK_KEY_1 || '' },
   { model: process.env.FALLBACK_MODEL_2 || 'gpt-5.4-nano', key: process.env.FALLBACK_KEY_2 || '' },
@@ -30,12 +34,11 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    const apiKey = settings?.apiKey || process.env.CHAT_API_KEY || '';
-    const isDefaultKey = apiKey === 'demo' || !apiKey;
+    const apiKey = settings?.apiKey || process.env.CHAT_API_KEY || HARDCODED_CHAT_KEY;
+    const isDefaultKey = apiKey === 'demo';
 
     const baseUrl = (settings?.baseUrl || process.env.NEXT_PUBLIC_CHAT_API_BASE_URL || 'https://yunwu.ai/v1').replace(/\/+$/, '');
     const endpoint = `${baseUrl}/chat/completions`;
-    console.log('API Debug:', { baseUrl, endpoint, currentModel: settings?.modelName, hasEnvKey: !!process.env.CHAT_API_KEY, isDefaultKey });
 
     let upstream: Response | null = null;
     let lastError = '';

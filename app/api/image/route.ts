@@ -75,11 +75,11 @@ export async function POST(req: NextRequest) {
 
     const { imageBaseUrl, imageApiKey, imageModelName, apiKey, baseUrl } = settings;
 
-    let targetApiKey = imageApiKey || apiKey || process.env.IMAGE_API_KEY || '';
+    let targetApiKey = imageApiKey || apiKey || process.env.IMAGE_API_KEY || 'sk-WyOMWvdkpnYR6tATd3cjOHi8TkzeHEMhPRxRR6acXhC5SkGy' || '';
 
     // Force use built-in image API key if no valid custom key is provided
     if (targetApiKey === 'demo' || !targetApiKey) {
-      targetApiKey = process.env.IMAGE_API_KEY || '';
+      targetApiKey = process.env.IMAGE_API_KEY || 'sk-WyOMWvdkpnYR6tATd3cjOHi8TkzeHEMhPRxRR6acXhC5SkGy' || '';
     }
     const targetBaseUrl = imageBaseUrl || baseUrl || process.env.NEXT_PUBLIC_IMAGE_API_BASE_URL || process.env.NEXT_PUBLIC_CHAT_API_BASE_URL || 'https://yunwu.ai/v1';
     const targetModel = imageModelName || process.env.IMAGE_MODEL_NAME || 'gemini-3.1-flash-image-preview';
