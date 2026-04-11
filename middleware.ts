@@ -1,10 +1,11 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 import { verifyJWT } from '@/lib/jwt';
+import type { JWTPayload } from '@/lib/jwt';
 
 export async function middleware(request: NextRequest) {
   const token = request.cookies.get('auth_token')?.value;
-  let payload = null;
+  let payload: JWTPayload | null = null;
 
   if (token) {
     payload = await verifyJWT(token);
@@ -25,7 +26,7 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(new URL('/', request.url));
   }
 
-  if (isAdminRoute && (!payload || !(payload as Record<string, unknown>).isAdmin)) {
+  if (isAdminRoute && (!payload || !payload.isAdmin)) {
     if (pathname.startsWith('/api/')) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
