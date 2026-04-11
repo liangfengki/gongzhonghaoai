@@ -1,9 +1,9 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 
-export default function LoginPage() {
+function LoginForm() {
   const [mode, setMode] = useState<'login' | 'register'>('login');
   const [username, setUsername] = useState('');
   const [email, setEmail] = useState('');
@@ -175,5 +175,13 @@ export default function LoginPage() {
         </div>
       </div>
     </div>
+  );
+}
+
+export default function LoginPage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen bg-[#0A0A0B] flex items-center justify-center p-4"><div className="text-white">加载中...</div></div>}>
+      <LoginForm />
+    </Suspense>
   );
 }
