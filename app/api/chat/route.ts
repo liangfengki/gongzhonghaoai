@@ -35,6 +35,7 @@ export async function POST(req: NextRequest) {
 
     const baseUrl = (settings?.baseUrl || process.env.NEXT_PUBLIC_CHAT_API_BASE_URL || 'https://yunwu.ai/v1').replace(/\/+$/, '');
     const endpoint = `${baseUrl}/chat/completions`;
+    console.log('API Debug:', { baseUrl, endpoint, currentModel: settings?.modelName, hasEnvKey: !!process.env.CHAT_API_KEY, isDefaultKey });
 
     let upstream: Response | null = null;
     let lastError = '';
