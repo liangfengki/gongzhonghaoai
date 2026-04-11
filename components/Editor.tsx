@@ -250,7 +250,7 @@ ${research || '未搜索到相关资料，请根据话题自行构思'}
 3. 按照逻辑顺序排列（引入→展开→深入→总结）
 4. 只返回小标题，每行一个`;
 
-      const result = await generateText([{ role: 'user', content: prompt }], settings);
+      const result = await generateText([{ role: 'user', content: prompt }], settings, 5);
       const outline = result
         .split('\n')
         .filter((line) => line.trim().length > 0)
@@ -316,7 +316,7 @@ ${outline.map((o, i) => `${i + 1}. ${o}`).join('\n')}
 19. 专业术语保留但不用生僻字，语言自然口语化`;
 
       showToast('正在生成文章...', 'info');
-      const content = await generateText([{ role: 'user', content: prompt }], settings);
+      const content = await generateText([{ role: 'user', content: prompt }], settings, 20);
       let cleanResult = cleanAIOutput(content);
       cleanResult = deaiPostProcess(cleanResult);
       if (cleanResult) {
@@ -388,7 +388,8 @@ AI味：此外，该研究还发现，定期运动不仅能够有效改善心血
 
         const response = await generateTextStream(
           [{ role: 'user', content: instruction }],
-          settings
+          settings,
+          10
         );
 
         let accumulated = '';
@@ -434,7 +435,8 @@ ${sourceContent}`;
             { role: 'system', content: DEAI_SYSTEM_PROMPT },
             { role: 'user', content: deaiUserPrompt },
           ],
-          settings
+          settings,
+          10
         );
 
         let deaiAccumulated = '';
