@@ -48,11 +48,11 @@ export async function POST(req: NextRequest) {
       user: { username: user.username, credits: user.credits, isAdmin: user.isAdmin },
     });
 
-    // 修复 Vercel 上的跨域 cookie 丢失问题：显式设置 domain 和 sameSite
+    
     response.cookies.set('auth_token', token, {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
-      sameSite: 'none', // Vercel 部署环境需要设置为 none 以允许跨域 cookie
+      sameSite: 'lax'
       maxAge: 60 * 60 * 24 * 30,
       path: '/',
     });

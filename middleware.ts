@@ -1,28 +1,13 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
-import { jwtVerify } from 'jose';
-
-const getSecret = () => {
-  const secretString = process.env.JWT_SECRET || '01agent-jwt-secret-key-2024-muka-ai-very-long-random-string-fallback';
-  return new TextEncoder().encode(secretString);
-};
-
-
+import { verifyJWT } from '@/lib/jwt';
 
 export async function middleware(request: NextRequest) {
   const token = request.cookies.get('auth_token')?.value;
-  let verifyError = 'none';
   let payload = null;
 
   if (token) {
-    try {
-      const { payload: p } = await jwtVerify(token, getSecret());
-      payload = p;
-    } catch (e: any) {
-      verifyError = e.message || 'verify_failed';
-    }
-  } else {
-    verifyError = 'no_token_cookie';
+    payload = await verifyJWT(token);
   }
 
   const pathname = request.nextUrl.pathname;
@@ -31,9 +16,9 @@ export async function middleware(request: NextRequest) {
 
   if (!payload && !isAuthRoute) {
     if (pathname.startsWith('/api/')) {
-      return NextResponse.json({ error: 'Unauthorized', detail: verifyError }, { status: 401 });
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
-    return NextResponse.redirect(new URL(`/login?err=${verifyError}`, request.url));
+    return NextResponse.redirect(new URL('/login', request.url));
   }
 
   if (payload && pathname === '/login') {
