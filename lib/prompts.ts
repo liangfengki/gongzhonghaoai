@@ -155,7 +155,25 @@ ${content}`,
 
 原文：
 ${content}`,
+  },
 ];
+
+export const CATEGORY_LABELS: Record<string, { name: string; color: string }> = {
+  perspective: { name: '视角重塑', color: 'blue' },
+  structure: { name: '结构优化', color: 'purple' },
+  expression: { name: '表达升级', color: 'orange' },
+  value: { name: '价值延伸', color: 'green' },
+};
+
+// Preset options for templates that need them
+export const TEMPLATE_OPTIONS: Record<string, Array<{ label: string; value: string }>> = {
+  'professional-role': [
+    { label: '资深营销专家', value: '资深营销专家' },
+    { label: '情感咨询师', value: '情感咨询师' },
+    { label: '行业观察者', value: '行业观察者' },
+    { label: '心理学教授', value: '心理学教授' },
+    { label: '商业分析师', value: '商业分析师' },
+  ],
   'emotion-shift': [
     { label: '理性温和', value: '理性温和' },
     { label: '治愈共情', value: '治愈共情' },
