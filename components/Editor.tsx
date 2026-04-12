@@ -418,17 +418,14 @@ AI味：此外，该研究还发现，定期运动不仅能够有效改善心血
           return match ? `![${match[1]}](${match[2]})` : m;
         });
 
-        const deaiUserPrompt = `请严格按照"改写五步法"对这篇文章进行深度去AI味处理，彻底改写成真人网帖风格，必须骗过"朱雀"检测器！
+        const deaiUserPrompt = `请对提供的文案深度改写，严格执行以下规则，违者重罚：
 
-处理要求：
-1. 绝对不要"总-分-总"结构，多用短句，加入极短句冲击。
-2. 注入强烈的人类主观情绪和吐槽（说实话、绝了、对吧、你敢信）。
-3. 彻底消灭所有官方词、过渡词（此外、因此、首先、提升等）。
-4. 制造"瑕疵美学"（省略号、倒装、轻微跑题）。
-5. 【重要】原文中的所有 [IMG_X] 占位符必须绝对保留在原文对应的上下文段落中，一个都不能漏！
-
-原文：
-${sourceContent}`;
+1. 100%保留原文核心观点、情绪、细节、逻辑，不改动原意、不增删内容、不调整顺序，改写后更戳人、氛围感拉满，纯真人质感、零AI痕迹。
+2. 长短句无规律交错，短句占比高，自然口语顿挫，拒绝工整对仗、排比，杜绝长-短-长-短固定循环。
+3. 彻底删除AI通用套话、模板化抒情词，替换为真实生活化口语，不加无效注水内容，不强行优化到过度丝滑。
+4. 禁用：所以、因此、于是、其实等AI连接词；十分、非常、极其等极致修饰词。
+5. 排版适配手机阅读，每段2-4行，情绪句单独成段，仅输出改写后的正文。
+        `;
 
         const deaiResponse = await generateTextStream(
           [
@@ -444,7 +441,7 @@ ${sourceContent}`;
           deaiAccumulated += chunk;
           if (article) {
             let cleaned = cleanAIOutput(deaiAccumulated);
-            cleaned = deaiPostProcess(cleaned);
+            // 不再对自定义去AI味提示词的输出做二次处理，避免内容变短变怪
             cleaned = restoreImages(cleaned, images);
             if (cleaned.trim()) {
               updateArticle(article.id, { content: cleaned, isOptimized: true });
