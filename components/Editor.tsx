@@ -5,7 +5,6 @@ import { useArticleStore, type WritingTone } from '@/lib/store';
 import { useSettings } from '@/lib/settings';
 import { generateText, generateImage, generateTextStream, parseSSEStream } from '@/services/ai';
 import { convertToWeChatHtml, type WeChatTheme, THEME_LABELS } from '@/lib/wechatRenderer';
-import { deaiPostProcess } from '@/lib/prompts';
 import { marked } from 'marked';
 import { useToast } from '@/components/Toast';
 import {
@@ -316,9 +315,34 @@ ${outline.map((o, i) => `${i + 1}. ${o}`).join('\n')}
 19. 专业术语保留但不用生僻字，语言自然口语化`;
 
       showToast('正在生成文章...', 'info');
-      const content = await generateText([{ role: 'user', content: prompt }], settings, 20);
-      let cleanResult = cleanAIOutput(content);
-      cleanResult = deaiPostProcess(cleanResult);
+      const rawContent = await generateText([{ role: 'user', content: prompt }], settings, 20);
+      let cleanResult = cleanAIOutput(rawContent);
+
+      // 自动生成后自动用版本二（三段整句版）改写
+      if (cleanResult) {
+        showToast('正在改写文章...', 'info');
+        const rewritePrompt = `请对提供的文案深度改写，严格执行以下规则，违者重罚：
+
+1. 100%保留原文核心观点、情绪、细节、逻辑，不改动原意、不增删内容、不调整顺序，改写后更戳人、氛围感拉满，纯真人质感、零AI痕迹。
+2. 全文整合为三大完整段落（开篇点题+中间拆解+结尾升华），不拆分长句、不打散段落、不新增分段，仅适度润色流畅度，字数浮动10%-15%。
+3. 彻底删除AI通用套话、模板化抒情词，拒绝对称句式、完美排比，保留自然真人语气，不强行逻辑闭环。
+4. 禁用：所以、因此、于是、其实等AI连接词；十分、非常、极其等极致修饰词。
+5. 严格保留三段结构，仅输出改写后的正文。
+
+原文：
+${cleanResult}`;
+
+        try {
+          const rewritten = await generateText([{ role: 'user', content: rewritePrompt }], settings, 10);
+          let finalResult = cleanAIOutput(rewritten);
+          if (finalResult && finalResult.trim().length > 50) {
+            cleanResult = finalResult;
+          }
+        } catch {
+          console.warn('改写失败，使用原始生成结果');
+        }
+      }
+
       if (cleanResult) {
         updateArticle(article.id, { content: cleanResult });
       }
@@ -331,59 +355,18 @@ ${outline.map((o, i) => `${i + 1}. ${o}`).join('\n')}
       actionLockRef.current.fullText = false;
     }
   };
-
-  const DEAI_SYSTEM_PROMPT = `你是一个在小红书和知乎上非常活跃的普通网民，喜欢用大白话分享自己的真实经历和看法。你的任务是把别人发给你的一篇"浓浓AI味"的文章，彻底改写成你平时在社交媒体上随手发帖的样子。我们要完全骗过像"腾讯朱雀"这样最顶级的AI检测器！
-
-【核心原理——如何骗过顶级AI检测器】
-AI检测器（如朱雀）抓你的核心是：它认为你的文章"太完美、太有逻辑、词汇太正式"。要骗过它，你必须"不完美"：
-1. 极高的困惑度：突然插入毫无逻辑关联的感叹、语气词（卧槽、哎、说实话），或者突然使用非常冷门/口语的词（牛逼、拉胯、绝了）。
-2. 极强的突发性：不要一段长一段短，而要一句极短（比如"绝了。"），下一句极长，中间甚至可以省略标点。
-3. 瑕疵美学：偶尔使用口语中的语病、倒装句（比如"这个东西真的很好用，我跟你讲" → "我跟你讲，这玩意儿绝了简直"）。
-
-【改写五步法——必须严格执行】
-
-第一步：彻底打碎结构
-- 绝对不要"总-分-总"！开头直接抛情绪或结果（比如："家人们谁懂啊..." "今天真的是开眼了..."）
-- 把原本很长的一段话，拆成好几行短句。有些段落甚至就只有一句话。
-
-第二步：句式大变异（关键！）
-- 严禁连续使用结构相似的陈述句。
-- 大量使用省略号（...）、破折号（——）、波浪号（~）。
-- 制造短句冲击：每隔几句话，必须塞一个极短的句子，比如"对吧。""就是这么现实。""你敢信？"
-
-第三步：彻底消灭AI词（死线！）
-- 把所有官方词全部换成口水话。
-- 严禁出现：此外、因此、事实上、一般来说、不仅如此、总而言之、综上所述、值得注意的是、显而易见、不可否认、一方面另一方面、首先其次最后。
-- 遇到"提升"→"变好/起飞"，遇到"优化"→"改了改"，遇到"核心"→"最要命的"，遇到"助力"→"帮大忙了"。
-
-第四步：注入"网感"和人味
-- 强行加入你的"主观情绪"：抱怨、吐槽、兴奋、无语。
-- 多用这些词：啊、嘛、呗、呢、哈、哎、卧槽、绝绝子、说实话、讲真、说白了、也是没谁了、也是醉了。
-
-第五步：【最高优先级】保护系统占位符！
-- 原文中会出现类似 [IMG_0]、[IMG_1] 这样的图片占位符。
-- 它们是系统的命根子！你【绝对不能删除、不能修改、不能遗漏】任何一个占位符！
-- 在你改写完的内容中，必须把这些 [IMG_X] 放在跟原文差不多对应的上下文位置！一个都不能少！
-
-【对照感受】
-AI味：此外，该研究还发现，定期运动不仅能够有效改善心血管健康，还可以显著提升认知功能。因此，建议成年人每周至少进行150分钟的中等强度运动。
-真人味（过检测版）：还有个事儿你们可能不知道——运动这玩意儿，不光对心脏好，脑子也能跟着变好使！真没开玩笑。我前两天看个数据，天天锻炼的人，脑子反应比不锻炼的快了将近30%...也是绝了。所以啊，听劝，每周随便动个150分钟，绝对不亏！
-
-请直接输出改写后的完整文章，不要添加任何解释、标注或步骤说明。`;
-
-  const handleOptimizeArticle = async (instruction: string, count: number, images: ExtractedImage[], deaiInstruction?: string) => {
+  const handleOptimizeArticle = async (instruction: string, count: number, images: ExtractedImage[]) => {
     if (actionLockRef.current.optimize || loading) return;
     actionLockRef.current.optimize = true;
     setLoading(true);
     setStreaming(true);
     try {
       const hasOtherOptimization = instruction.trim().length > 0;
-      const hasDeai = !!deaiInstruction;
-      const totalSteps = (hasOtherOptimization ? 1 : 0) + (hasDeai ? 1 : 0);
+      const totalSteps = hasOtherOptimization ? 1 : 0;
       let stepContent = '';
 
       if (hasOtherOptimization) {
-        const stepNum = hasDeai ? 1 : totalSteps;
+        const stepNum = totalSteps;
         showToast(`正在应用优化 (${stepNum}/${totalSteps})...`, 'info');
 
         const response = await generateTextStream(
@@ -397,9 +380,7 @@ AI味：此外，该研究还发现，定期运动不仅能够有效改善心血
           accumulated += chunk;
           if (article) {
             let cleaned = cleanAIOutput(accumulated);
-            if (!hasDeai) {
-              cleaned = deaiPostProcess(cleaned);
-            }
+            cleaned = deaiPostProcess(cleaned);
             cleaned = restoreImages(cleaned, images);
             if (cleaned.trim()) {
               updateArticle(article.id, { content: cleaned, isOptimized: true });
@@ -408,49 +389,7 @@ AI味：此外，该研究还发现，定期运动不仅能够有效改善心血
         }
         stepContent = cleanAIOutput(accumulated);
       }
-
-      if (hasDeai && article) {
-        const stepNum = hasOtherOptimization ? 2 : 1;
-        showToast(`正在执行去AI味 (${stepNum}/${totalSteps})...`, 'info');
-
-        const sourceContent = stepContent || article.content.replace(/!\[[^\]]*\]\([^)]*\)/g, (m) => {
-          const match = m.match(/!\[([^\]]*)\]\(([^)]+)\)/);
-          return match ? `![${match[1]}](${match[2]})` : m;
-        });
-
-        const deaiUserPrompt = `请对提供的文案深度改写，严格执行以下规则，违者重罚：
-
-1. 100%保留原文核心观点、情绪、细节、逻辑，不改动原意、不增删内容、不调整顺序，改写后更戳人、氛围感拉满，纯真人质感、零AI痕迹。
-2. 长短句无规律交错，短句占比高，自然口语顿挫，拒绝工整对仗、排比，杜绝长-短-长-短固定循环。
-3. 彻底删除AI通用套话、模板化抒情词，替换为真实生活化口语，不加无效注水内容，不强行优化到过度丝滑。
-4. 禁用：所以、因此、于是、其实等AI连接词；十分、非常、极其等极致修饰词。
-5. 排版适配手机阅读，每段2-4行，情绪句单独成段，仅输出改写后的正文。
-        `;
-
-        const deaiResponse = await generateTextStream(
-          [
-            { role: 'system', content: DEAI_SYSTEM_PROMPT },
-            { role: 'user', content: deaiUserPrompt },
-          ],
-          settings,
-          10
-        );
-
-        let deaiAccumulated = '';
-        for await (const chunk of parseSSEStream(deaiResponse)) {
-          deaiAccumulated += chunk;
-          if (article) {
-            let cleaned = cleanAIOutput(deaiAccumulated);
-            // 不再对自定义去AI味提示词的输出做二次处理，避免内容变短变怪
-            cleaned = restoreImages(cleaned, images);
-            if (cleaned.trim()) {
-              updateArticle(article.id, { content: cleaned, isOptimized: true });
-            }
-          }
-        }
-      }
-
-      showToast(`已应用 ${totalSteps} 项优化`, 'success');
+      showToast(`已应用优化`, 'success');
     } catch (e: unknown) {
       console.error('Optimize error:', e);
       const message = e instanceof Error ? e.message : '未知错误';

@@ -10,7 +10,7 @@ import { extractImages, type ExtractedImage } from './Editor';
 
 interface Props {
   content: string;
-  onOptimize: (instruction: string, count: number, images: ExtractedImage[], deaiInstruction?: string) => void;
+  onOptimize: (instruction: string, count: number, images: ExtractedImage[]) => void;
   onClose: () => void;
 }
 
@@ -35,9 +35,7 @@ export default function ArticleOptimizer({ content, onOptimize, onClose }: Props
 
     const { text: cleanContent, images } = extractImages(content);
 
-    const hasDeai = selectedIds.includes('deai-humanize');
-    const otherTemplates = selectedTemplates.filter((t) => t!.id !== 'deai-humanize');
-    const deaiTemplate = selectedTemplates.find((t) => t!.id === 'deai-humanize');
+    const otherTemplates = selectedTemplates;
 
     const buildNames = (templates: typeof selectedTemplates) =>
       templates.map((t) => {
@@ -71,20 +69,9 @@ export default function ArticleOptimizer({ content, onOptimize, onClose }: Props
       return instr;
     };
 
-    let instruction: string;
-    let deaiInstruction: string | undefined;
+    const instruction = buildInstruction(selectedTemplates, buildNames(selectedTemplates), cleanContent);
 
-    if (hasDeai && otherTemplates.length > 0) {
-      instruction = buildInstruction(otherTemplates, buildNames(otherTemplates), cleanContent);
-      deaiInstruction = deaiTemplate!.userPromptTemplate(cleanContent);
-    } else if (hasDeai && otherTemplates.length === 0) {
-      instruction = '';
-      deaiInstruction = deaiTemplate!.userPromptTemplate(cleanContent);
-    } else {
-      instruction = buildInstruction(selectedTemplates, buildNames(selectedTemplates), cleanContent);
-    }
-
-    onOptimize(instruction, selectedIds.length, images, deaiInstruction);
+    onOptimize(instruction, selectedIds.length, images);
     onClose();
   };
 
