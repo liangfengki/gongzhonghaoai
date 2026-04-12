@@ -19,10 +19,15 @@ export async function createJWT(payload: JWTPayload): Promise<string> {
 }
 
 export async function verifyJWT(token: string): Promise<JWTPayload | null> {
+    console.log("JWT Debug: Attempting to verify token:", token ? token.substring(0, 20) + "..." : "null");
+    const secret = getSecret();
+    console.log("JWT Debug: Secret length:", secret.length);
   try {
+        console.log("JWT Debug: About to call jwtVerify");
     const { payload } = await jwtVerify(token, getSecret());
     return payload as unknown as JWTPayload;
-  } catch {
+  } catch (error) {
+        console.log("JWT Debug: Verification failed:", error);
     return null;
   }
 }
