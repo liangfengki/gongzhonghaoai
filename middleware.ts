@@ -7,7 +7,6 @@ export async function middleware(request: NextRequest) {
   console.log("Middleware Debug: Request to", request.nextUrl.pathname);
   const token = request.cookies.get('auth_token')?.value;
   console.log("Middleware Debug: Token found:", token ? "YES (length: " + token.length + ")" : "NO");
-  const token = request.cookies.get('auth_token')?.value;
   let payload: JWTPayload | null = null;
   if (token) {
     console.log("Middleware Debug: About to verify JWT");
@@ -15,9 +14,6 @@ export async function middleware(request: NextRequest) {
     console.log("Middleware Debug: JWT verification result:", payload ? "SUCCESS" : "FAILED");
   }
 
-  if (token) {
-    payload = await verifyJWT(token);
-  }
 
   const pathname = request.nextUrl.pathname;
   const isAuthRoute = pathname.startsWith('/login') || pathname.startsWith('/api/auth');
