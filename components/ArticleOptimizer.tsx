@@ -38,34 +38,15 @@ export default function ArticleOptimizer({ content, onOptimize, onClose }: Props
     const otherTemplates = selectedTemplates;
 
     const buildNames = (templates: typeof selectedTemplates) =>
-      templates.map((t) => {
-        const optKey = t!.id === 'professional-role' ? 'role' : t!.id === 'emotion-shift' ? 'tone' : 'domain';
-        const optValue = options[optKey];
-        const label = TEMPLATE_OPTIONS[t!.id]?.find((o) => o.value === optValue)?.label;
-        return label ? `${t!.name}（${label}）` : t!.name;
-      });
+      templates.map((t) => t!.name);
 
     const buildInstruction = (templates: typeof selectedTemplates, names: string[], text: string) => {
-      let instr = `请对以下文章进行优化改写，使用以下技法：${names.join('、')}。\n\n`;
-      instr += `重要规则：\n`;
-      instr += `1. 输出完整的改写后文章，不要缩短或省略任何段落\n`;
-      instr += `2. 保留所有标题层级（#、##、###）\n`;
-      instr += `3. 绝对不要在正文中使用【XXX】或者"XXX（选定最优方案）："这种标注性质的词语。所有内容必须自然融入正文。\n`;
+      // Use the first selected template's full prompt as the instruction
+      const template = templates[0]!;
+      let instr = template.userPromptTemplate(text);
       if (images.length > 0) {
-        instr += `4. 【必须绝对保留】原文中出现的所有形如 [IMG_X] 的图片标记！它们是系统占位符，改写时请务必原样放在最符合上下文的位置，千万不要修改或删除它们。\n\n`;
-      } else {
-        instr += `\n`;
+        instr += `\n\n【必须绝对保留】原文中出现的所有形如 [IMG_X] 的图片标记！它们是系统占位符，改写时请务必原样放在最符合上下文的位置，千万不要修改或删除它们。`;
       }
-      for (const t of templates) {
-        const optKey = t!.id === 'professional-role' ? 'role' : t!.id === 'emotion-shift' ? 'tone' : 'domain';
-        const optValue = options[optKey];
-        if (optValue) {
-          instr += `- ${t!.name}：${t!.userPromptTemplate('', { [optKey]: optValue }).split('\n\n')[0]}\n`;
-        } else {
-          instr += `- ${t!.name}：${t!.description}\n`;
-        }
-      }
-      instr += `\n原文：\n${text}`;
       return instr;
     };
 
@@ -101,7 +82,7 @@ export default function ArticleOptimizer({ content, onOptimize, onClose }: Props
         {/* Content */}
         <div className="flex-1 overflow-y-auto">
           <div className="p-4 space-y-4">
-            <p className="text-xs text-gray-400 px-1">点击选择多项，一次性综合应用</p>
+            <p className="text-xs text-gray-400 px-1">选择一个改写版本</p>
               {Object.entries(CATEGORY_LABELS).map(([catKey, catInfo]) => {
                 const templates = OPTIMIZER_TEMPLATES.filter((t) => t.category === catKey);
                 return (
@@ -173,7 +154,7 @@ export default function ArticleOptimizer({ content, onOptimize, onClose }: Props
             className="w-full flex items-center justify-center gap-2 bg-gray-900 text-white py-3 rounded-xl text-sm font-medium hover:bg-gray-800 transition-all shadow-sm disabled:opacity-40 disabled:cursor-not-allowed"
           >
             <Sparkles size={15} />
-            {selectedIds.length > 0 ? `开始优化（${selectedIds.length} 项）` : '请先选择优化技法'}
+            {selectedIds.length > 0 ? `开始改写` : '请先选择改写版本'}
           </button>
         </div>
       </div>

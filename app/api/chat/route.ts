@@ -2,13 +2,12 @@ import { NextRequest } from 'next/server';
 import { requireAuth } from '@/lib/auth-helpers';
 import { prisma } from '@/lib/prisma';
 
-export const maxDuration = 60;
-const HARDCODED_CHAT_KEY = 'sk-xFfRUfw3BZ5FHHEBOPYcDPIYPkfgvXpr6VJivgDaLQvrrQye';
-const HARDCODED_IMAGE_KEY = 'sk-WyOMWvdkpnYR6tATd3cjOHi8TkzeHEMhPRxRR6acXhC5SkGy'; 
+export const maxDuration = 300;
+
 const FALLBACK_POOL = [
-  { model: process.env.FALLBACK_MODEL_1 || 'gemini-3.1-flash-lite-preview', key: process.env.FALLBACK_KEY_1 || '' },
-  { model: process.env.FALLBACK_MODEL_2 || 'gpt-5.4-nano', key: process.env.FALLBACK_KEY_2 || '' },
-  { model: process.env.FALLBACK_MODEL_3 || 'grok-4.2', key: process.env.FALLBACK_KEY_3 || '' },
+  { model: process.env.FALLBACK_MODEL_1 || 'MiniMax-M2.7', key: process.env.FALLBACK_KEY_1 || '' },
+  { model: process.env.FALLBACK_MODEL_2 || 'MiniMax-M2.7', key: process.env.FALLBACK_KEY_2 || '' },
+  { model: process.env.FALLBACK_MODEL_3 || 'MiniMax-M2.7', key: process.env.FALLBACK_KEY_3 || '' },
 ] as const;
 
 export async function POST(req: NextRequest) {
@@ -32,16 +31,8 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    const apiKey = settings?.apiKey || process.env.CHAT_API_KEY || HARDCODED_CHAT_KEY;
+    const apiKey = settings?.apiKey || process.env.CHAT_API_KEY || '';
     const isDefaultKey = apiKey === 'demo';
-// Debug logging
-console.log('Chat API Debug:', {
-  hasSettings: !!settings,
-  settingsApiKey: settings?.apiKey ? '***SET***' : 'empty',
-  hasEnvKey: !!process.env.CHAT_API_KEY,
-  usingHardcoded: !(settings?.apiKey || process.env.CHAT_API_KEY),
-  keySource: settings?.apiKey ? 'settings' : (process.env.CHAT_API_KEY ? 'env' : 'hardcoded')
-});
 
 
     const baseUrl = (settings?.baseUrl || process.env.NEXT_PUBLIC_CHAT_API_BASE_URL || 'https://yunwu.ai/v1').replace(/\/+$/, '');
@@ -52,7 +43,7 @@ console.log('Chat API Debug:', {
 
     for (let attempt = 0; attempt < 3; attempt++) {
       try {
-        let currentModel = settings?.modelName || process.env.CHAT_MODEL_NAME || 'gemini-3.1-flash-lite-preview';
+        let currentModel = process.env.CHAT_MODEL_NAME || 'MiniMax-M2.7';
         let currentKey = apiKey;
 
         if (isDefaultKey) {
@@ -81,7 +72,7 @@ console.log('Chat API Debug:', {
           method: 'POST',
           headers,
           body: JSON.stringify(body),
-          signal: AbortSignal.timeout(60000),
+          signal: AbortSignal.timeout(300000),
         });
 
         if (upstream.ok) break;

@@ -5,7 +5,7 @@ export interface OptimizerTemplate {
   id: string;
   name: string;
   icon: string;
-  category: 'perspective' | 'structure' | 'expression' | 'value';
+  category: 'expression' | 'structure';
   description: string;
   systemPrompt: string;
   userPromptTemplate: (content: string, options?: Record<string, string>) => string;
@@ -13,145 +13,37 @@ export interface OptimizerTemplate {
 
 export const OPTIMIZER_TEMPLATES: OptimizerTemplate[] = [
   {
-    id: 'professional-role',
-    name: '专业角色改写',
-    icon: '🎭',
-    category: 'perspective',
-    description: '化身专业身份，用行业视角重新解读',
-    systemPrompt: '你是一位资深的行业专家，擅长用专业视角、行业术语和独特洞察重新解读文章。你的改写会让内容更具权威感和个人风格，同时保持可读性。请直接输出改写后的完整文章，不要添加任何解释。',
-    userPromptTemplate: (content, opts) => `请你化身一位${opts?.role || '资深行业专家'}，用该身份的专业视角、行业术语和独特洞察，重新解读并改写这篇公众号文章，让内容更具权威感和个人风格。
+    id: 'short-sentences',
+    name: '长短错落短句版',
+    icon: '✂️',
+    category: 'expression',
+    description: '朋友圈/短视频/走心文案通用，短句占比高，自然口语顿挫',
+    systemPrompt: '你是一位资深的文案改写专家，擅长将文章改写为长短错落、短句占比高的风格，纯真人质感、零AI痕迹。请直接输出改写后的完整正文，不要添加任何解释。',
+    userPromptTemplate: (content) => `请对提供的文案深度改写，严格执行以下规则，违者重罚：
+
+1. 100%保留原文核心观点、情绪、细节、逻辑，不改动原意、不增删内容、不调整顺序，改写后更戳人、氛围感拉满，纯真人质感、零AI痕迹。
+2. 长短句无规律交错，短句占比高，自然口语顿挫，拒绝工整对仗、排比，杜绝长-短-长-短固定循环。
+3. 彻底删除AI通用套话、模板化抒情词，替换为真实生活化口语，不加无效注水内容，不强行优化到过度丝滑。
+4. 禁用：所以、因此、于是、其实等AI连接词；十分、非常、极其等极致修饰词。
+5. 排版适配手机阅读，每段2-4行，情绪句单独成段，仅输出改写后的正文。
 
 原文：
 ${content}`,
   },
   {
-    id: 'counter-argument',
-    name: '反向观点重构',
-    icon: '⚡',
-    category: 'perspective',
-    description: '站在对立面重写，制造辩论张力',
-    systemPrompt: '你是一位善于思辨的评论员，擅长从不同角度审视问题，用逻辑闭环、论据扎实的方式表达与主流不同的观点。你的文章会制造有张力的辩论感，引发读者思考。请直接输出改写后的完整文章。',
-    userPromptTemplate: (content) => `这篇公众号文章的核心观点如下。请你站在"反驳核心观点"或"补充其另一面"的立场，重写一篇逻辑闭环、论据扎实的文章，制造有张力的辩论感。
-
-原文：
-${content}`,
-  },
-  {
-    id: 'emotion-shift',
-    name: '情绪氛围重塑',
-    icon: '🎨',
-    category: 'perspective',
-    description: '保留事实，切换情绪基调',
-    systemPrompt: '你是一位情感调性大师，擅长在保留核心事实的前提下，通过用词、句式和案例调整，将文章的情绪基调切换为全新的感受。请直接输出改写后的完整文章。',
-    userPromptTemplate: (content, opts) => `保留文章核心事实不变，将原文的情绪基调切换为"${opts?.tone || '理性温和'}"的风格，通过用词、句式和案例调整，传递全新情绪感受。
-
-原文：
-${content}`,
-  },
-  {
-    id: 'conversation-style',
-    name: '对话体改写',
-    icon: '💬',
-    category: 'perspective',
-    description: '朋友聊天式，拉近距离',
-    systemPrompt: '你是一位擅长用对话体写作的公众号作者，能把任何文章改写成像朋友聊天一样的风格。你善于使用设问、反问和口语化表达，让阅读轻松有代入感。请直接输出改写后的完整文章。',
-    userPromptTemplate: (content) => `把这篇公众号文章改成"朋友聊天式"对话体，多用设问、反问和口语化表达，像跟读者唠嗑一样，拉近距离，让阅读更轻松有代入感。
-
-原文：
-${content}`,
-  },
-  {
-    id: 'checklist-extract',
-    name: '清单化提炼',
-    icon: '📋',
+    id: 'three-paragraphs',
+    name: '三段整句版',
+    icon: '📝',
     category: 'structure',
-    description: '浓缩为方法论清单，快速吸收',
-    systemPrompt: '你是一位擅长内容结构化的大师，能把长文的核心方法论、关键观点浓缩成简洁有力的清单。每个要点都会搭配精炼案例，方便读者快速吸收。请直接输出改写后的完整文章。',
-    userPromptTemplate: (content) => `将这篇长文的核心方法论、关键观点或操作步骤，浓缩成一份清单文，每个要点简洁有力，搭配精炼案例，方便读者快速吸收。
+    description: '复刻软件风格/规整长文通用，三大完整段落',
+    systemPrompt: '你是一位资深的文案改写专家，擅长将文章整合为三大完整段落，纯真人质感、零AI痕迹。请直接输出改写后的完整正文，不要添加任何解释。',
+    userPromptTemplate: (content) => `请对提供的文案深度改写，严格执行以下规则，违者重罚：
 
-原文：
-${content}`,
-  },
-  {
-    id: 'hook-opening',
-    name: '吸引力开头',
-    icon: '🎣',
-    category: 'structure',
-    description: '设计吸引人的开头，抓住读者注意力',
-    systemPrompt: '你是一位爆款文章开头设计师，擅长用不同风格的开头钩子抓住读者注意力。请直接使用你认为最吸引人的开头重写文章，不要输出多种方案让用户选，也不要带上“开头方案”之类的标签，要让文章浑然一体。请直接输出改写后的完整文章。',
-    userPromptTemplate: (content) => `保留文章核心内容，为它设计一个极具吸引力的开头钩子（例如：颠覆常识的反常识观点、戳中读者的痛点场景、时效性强的热点事件引入），并直接完成全文改写。注意：不要输出多个方案，不要带有“开头方案”等标签。
-    
-原文：
-${content}`,
-  },
-  {
-    id: 'golden-quotes',
-    name: '金句密度升级',
-    icon: '✨',
-    category: 'expression',
-    description: '每500字植入记忆点金句',
-    systemPrompt: '你是一位金句大师，擅长在文章中植入犀利观点、诗意总结或巧妙比喻，让文章更有传播力。你会刻意在适当密度内植入记忆点金句。请直接输出改写后的完整文章。',
-    userPromptTemplate: (content) => `改写这篇文章，刻意在每500字内植入1句"记忆点金句"，可以是犀利观点、诗意总结或巧妙比喻，让文章更有传播力，让读者愿意收藏转发。
-
-原文：
-${content}`,
-  },
-  {
-    id: 'local-cases',
-    name: '本土案例替换',
-    icon: '🌏',
-    category: 'expression',
-    description: '替换为接地气的本土案例',
-    systemPrompt: '你是一位熟悉中国本土文化和行业动态的内容创作者，擅长把抽象概念用读者身边的故事和案例来表达，让内容更有说服力和亲切感。请直接输出改写后的完整文章。',
-    userPromptTemplate: (content, opts) => `把原文里的案例、故事和比喻，替换成${opts?.domain || '贴近国内日常生活'}的新鲜贴切案例，让内容更接地气，对目标读者更有说服力和亲切感。
-
-原文：
-${content}`,
-  },
-  {
-    id: 'value-extension',
-    name: '价值增量拓展',
-    icon: '📦',
-    category: 'value',
-    description: '补充实操步骤、工具资源',
-    systemPrompt: '你是一位擅长增值内容创作的专家，能在原有内容基础上做有价值的内容延伸，补充实操步骤、工具资源包、行业趋势分析等，让内容更有干货感。请直接输出改写后的完整文章。',
-    userPromptTemplate: (content) => `在原文核心内容基础上，做20%的价值延伸：补充1个可落地的实操步骤、整理1份工具资源包、分析最新行业趋势，或点出普通人容易踩的误区，让内容更有干货感。
-
-原文：
-${content}`,
-  },
-  {
-    id: 'interactive-ending',
-    name: '互动结尾设计',
-    icon: '🗣️',
-    category: 'structure',
-    description: '设计强互动引导结尾',
-    systemPrompt: '你是一位擅长提升文章互动率的公众号运营专家，能设计出让读者忍不住想评论、转发的结尾。你的互动话语应该非常自然地融入文章结尾，绝对不要出现【互动话题】、【结尾设计】之类的标签文字。请直接输出改写后的完整文章。',
-    userPromptTemplate: (content) => `为这篇文章设计一个强互动结尾，引导读者留言评论。注意：这些互动话语必须非常自然地融入段落中，绝对不允许出现【互动话题】之类的标记词。
-    
-原文：
-${content}`,
-  },
-  {
-    id: 'internet-slang',
-    name: '网感语言优化',
-    icon: '🔥',
-    category: 'expression',
-    description: '融入热词，加快节奏适配手机',
-    systemPrompt: '你是一位拥有极强网感的自媒体作者，擅长用当下流行但不低俗的网络热词和表达方式改写文章，把句子拆短、节奏加快，更符合手机端碎片化阅读习惯。请直接输出改写后的完整文章。',
-    userPromptTemplate: (content) => `给这篇文章做"网感升级"：适当用当下流行但不低俗的网络热词，融入热门梗意境，把句子拆短、节奏加快，更符合手机端碎片化阅读习惯。
-
-原文：
-${content}`,
-  },
-  {
-    id: 'story-narrative',
-    name: '故事叙事重构',
-    icon: '📖',
-    category: 'expression',
-    description: '用故事承载观点，有温度有画面',
-    systemPrompt: '你是一位擅长故事化写作的作者，能把干巴巴的论述装进一个完整的故事里，通过典型人物的经历引出、论证并升华观点，让道理变得有温度、有画面感。请直接输出改写后的完整文章。',
-    userPromptTemplate: (content) => `把这篇文章的核心观点装进一个完整故事里，通过真实或虚构的典型人物经历，引出、论证并升华观点，让干巴巴的道理变得有温度、有画面感。
+1. 100%保留原文核心观点、情绪、细节、逻辑，不改动原意、不增删内容、不调整顺序，改写后更戳人、氛围感拉满，纯真人质感、零AI痕迹。
+2. 全文整合为三大完整段落（开篇点题+中间拆解+结尾升华），不拆分长句、不打散段落、不新增分段，仅适度润色流畅度，字数浮动10%-15%。
+3. 彻底删除AI通用套话、模板化抒情词，拒绝对称句式、完美排比，保留自然真人语气，不强行逻辑闭环。
+4. 禁用：所以、因此、于是、其实等AI连接词；十分、非常、极其等极致修饰词。
+5. 严格保留三段结构，仅输出改写后的正文。
 
 原文：
 ${content}`,
@@ -159,36 +51,11 @@ ${content}`,
 ];
 
 export const CATEGORY_LABELS: Record<string, { name: string; color: string }> = {
-  perspective: { name: '视角重塑', color: 'blue' },
-  structure: { name: '结构优化', color: 'purple' },
-  expression: { name: '表达升级', color: 'orange' },
-  value: { name: '价值延伸', color: 'green' },
+  expression: { name: '短句版', color: 'orange' },
+  structure: { name: '三段版', color: 'purple' },
 };
 
-// Preset options for templates that need them
-export const TEMPLATE_OPTIONS: Record<string, Array<{ label: string; value: string }>> = {
-  'professional-role': [
-    { label: '资深营销专家', value: '资深营销专家' },
-    { label: '情感咨询师', value: '情感咨询师' },
-    { label: '行业观察者', value: '行业观察者' },
-    { label: '心理学教授', value: '心理学教授' },
-    { label: '商业分析师', value: '商业分析师' },
-  ],
-  'emotion-shift': [
-    { label: '理性温和', value: '理性温和' },
-    { label: '治愈共情', value: '治愈共情' },
-    { label: '积极向上', value: '积极向上' },
-    { label: '幽默诙谐', value: '幽默诙谐' },
-    { label: '冷静分析', value: '冷静分析' },
-  ],
-  'local-cases': [
-    { label: '国内生活场景', value: '贴近国内日常生活' },
-    { label: '互联网行业', value: '互联网科技行业' },
-    { label: '职场打工人', value: '职场打工人日常' },
-    { label: '年轻人文化', value: 'Z世代年轻人文化' },
-    { label: '创业商业', value: '创业和商业领域' },
-  ],
-};
+export const TEMPLATE_OPTIONS: Record<string, Array<{ label: string; value: string }>> = {};
 
 const AI_PHRASE_REPLACEMENTS: [RegExp, string][] = [
   [/综上所述[，,]?\s*/g, ''],

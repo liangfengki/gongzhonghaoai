@@ -5,6 +5,18 @@ export interface ChatMessage {
   content: string;
 }
 
+async function handleAuthError(response: Response, errorData: Record<string, unknown>) {
+  if ((response.status === 401 || response.status === 403) && typeof window !== 'undefined') {
+    const message = typeof errorData.error === 'object' && errorData.error !== null
+      ? (errorData.error as Record<string, unknown>).message
+      : undefined;
+    if (typeof message === 'string' && message.includes('重新登录')) {
+      await fetch('/api/auth/logout', { method: 'POST' });
+      window.location.href = '/login';
+    }
+  }
+}
+
 // Non-streaming text generation
 export async function generateText(messages: ChatMessage[], settings: AISettings, creditsCost?: number): Promise<string> {
   const response = await fetch('/api/chat', {
@@ -15,12 +27,7 @@ export async function generateText(messages: ChatMessage[], settings: AISettings
 
   if (!response.ok) {
     const errorData = await response.json();
-    if (response.status === 401 || response.status === 403) {
-      if (typeof window !== 'undefined' && errorData.error?.message?.includes('重新登录')) {
-        await fetch('/api/auth/logout', { method: 'POST' });
-        window.location.href = '/login';
-      }
-    }
+    await handleAuthError(response, errorData);
     throw new Error(errorData.error?.message || `API 请求失败: ${response.status}`);
   }
 
@@ -42,12 +49,7 @@ export async function generateTextStream(
 
   if (!response.ok) {
     const errorData = await response.json();
-    if (response.status === 401 || response.status === 403) {
-      if (typeof window !== 'undefined' && errorData.error?.message?.includes('重新登录')) {
-        await fetch('/api/auth/logout', { method: 'POST' });
-        window.location.href = '/login';
-      }
-    }
+    await handleAuthError(response, errorData);
     throw new Error(errorData.error?.message || `API 请求失败: ${response.status}`);
   }
 
@@ -56,7 +58,8 @@ export async function generateTextStream(
 
 // Parse SSE stream and yield content deltas
 export async function* parseSSEStream(response: Response): AsyncGenerator<string> {
-  const reader = response.body!.getReader();
+  if (!response.body) throw new Error('Response body is null');
+  const reader = response.body.getReader();
   const decoder = new TextDecoder();
   let buffer = '';
 
@@ -94,12 +97,7 @@ export async function generateImage(prompt: string, settings: AISettings): Promi
 
   if (!response.ok) {
     const errorData = await response.json();
-    if (response.status === 401 || response.status === 403) {
-      if (typeof window !== 'undefined' && errorData.error?.message?.includes('重新登录')) {
-        await fetch('/api/auth/logout', { method: 'POST' });
-        window.location.href = '/login';
-      }
-    }
+    await handleAuthError(response, errorData);
     throw new Error(errorData.error?.message || '图片生成失败');
   }
 

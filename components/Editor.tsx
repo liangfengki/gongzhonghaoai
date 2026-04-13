@@ -6,12 +6,14 @@ import { useSettings } from '@/lib/settings';
 import { generateText, generateImage, generateTextStream, parseSSEStream } from '@/services/ai';
 import { convertToWeChatHtml, type WeChatTheme, THEME_LABELS } from '@/lib/wechatRenderer';
 import { marked } from 'marked';
+import DOMPurify from 'isomorphic-dompurify';
+import { deaiPostProcess } from '@/lib/prompts';
 import { useToast } from '@/components/Toast';
 import {
   Loader2, FileText, Send, Copy, Check, Sparkles,
   Briefcase, Coffee, BookOpen,
   Palette, Smartphone, ChevronDown, Eye, Edit3,
-  Wand2, Plus, Type, Image as ImageIcon, KeyRound
+  Wand2, Plus, Type, Image as ImageIcon
 } from 'lucide-react';
 import NextLink from 'next/link';
 import TiptapEditor from './TiptapEditor';
@@ -133,29 +135,13 @@ export default function Editor() {
   const [forceEdit, setForceEdit] = useState(false);
   const [showImageWarning, setShowImageWarning] = useState(false);
   const [pendingImagePrompt, setPendingImagePrompt] = useState<string | null>(null);
-  const [showCodeExhaustedModal, setShowCodeExhaustedModal] = useState(false);
-  const [exhaustedMessage, setExhaustedMessage] = useState('');
-  const [newCode, setNewCode] = useState('');
-  const [replacingCode, setReplacingCode] = useState(false);
+  const imageGenCallbackRef = useRef<{ resolve: (url: string) => void; reject: (err: Error) => void } | null>(null);
   const actionLockRef = useRef({
     outline: false,
     fullText: false,
     optimize: false,
   });
   const researchPromiseRef = useRef<Promise<string> | null>(null);
-
-  // 监听授权码用完的自定义事件
-  useEffect(() => {
-    const handleAuthCodeExhausted = (e: Event) => {
-      const detail = (e as CustomEvent).detail;
-      setExhaustedMessage(detail?.message || '授权码已用完，请更换新的授权码');
-      setShowCodeExhaustedModal(true);
-    };
-    window.addEventListener('auth-code-exhausted', handleAuthCodeExhausted);
-    return () => {
-      window.removeEventListener('auth-code-exhausted', handleAuthCodeExhausted);
-    };
-  }, []);
 
   const article = articles.find((a) => a.id === currentArticleId);
   const tone: WritingTone = article?.tone || 'professional';
@@ -321,6 +307,8 @@ ${outline.map((o, i) => `${i + 1}. ${o}`).join('\n')}
       // 自动生成后自动用版本二（三段整句版）改写
       if (cleanResult) {
         showToast('正在改写文章...', 'info');
+        // 先提取图片占位符，改写后再恢复
+        const { text: textWithoutImages, images: extractedImages } = extractImages(cleanResult);
         const rewritePrompt = `请对提供的文案深度改写，严格执行以下规则，违者重罚：
 
 1. 100%保留原文核心观点、情绪、细节、逻辑，不改动原意、不增删内容、不调整顺序，改写后更戳人、氛围感拉满，纯真人质感、零AI痕迹。
@@ -328,18 +316,24 @@ ${outline.map((o, i) => `${i + 1}. ${o}`).join('\n')}
 3. 彻底删除AI通用套话、模板化抒情词，拒绝对称句式、完美排比，保留自然真人语气，不强行逻辑闭环。
 4. 禁用：所以、因此、于是、其实等AI连接词；十分、非常、极其等极致修饰词。
 5. 严格保留三段结构，仅输出改写后的正文。
+6. 【必须保留】文中的所有 [IMG_X] 标记必须原封不动保留在原来的位置，绝对不能删除、修改或移动。
+
+版本二：三段整句版（复刻软件风格/规整长文通用）
 
 原文：
-${cleanResult}`;
+${textWithoutImages}`;
 
         try {
           const rewritten = await generateText([{ role: 'user', content: rewritePrompt }], settings, 10);
           let finalResult = cleanAIOutput(rewritten);
           if (finalResult && finalResult.trim().length > 50) {
-            cleanResult = finalResult;
+            cleanResult = restoreImages(finalResult, extractedImages);
+          } else {
+            cleanResult = restoreImages(cleanResult, extractedImages);
           }
         } catch {
           console.warn('改写失败，使用原始生成结果');
+          cleanResult = restoreImages(cleanResult, extractedImages);
         }
       }
 
@@ -406,12 +400,8 @@ ${cleanResult}`;
       if (!article?.isOptimized && article?.content) {
         setPendingImagePrompt(prompt);
         setShowImageWarning(true);
-        
-        // Setup a global handler for the dialog response
-        (window as any).__imageGenResolve = resolve;
-        (window as any).__imageGenReject = reject;
+        imageGenCallbackRef.current = { resolve, reject };
       } else {
-        // Proceed directly
         generateImage(prompt, settings)
           .then(url => {
             showToast('图片生成完成', 'success');
@@ -429,64 +419,26 @@ ${cleanResult}`;
   const proceedWithImageGeneration = async () => {
     setShowImageWarning(false);
     if (!pendingImagePrompt) return;
-    
+
     try {
       const url = await generateImage(pendingImagePrompt, settings);
       showToast('图片生成完成', 'success');
-      if ((window as any).__imageGenResolve) {
-        (window as any).__imageGenResolve(url);
-      }
+      imageGenCallbackRef.current?.resolve(url);
     } catch (e) {
       const message = e instanceof Error ? e.message : '未知错误';
       showToast(`生成图片失败: ${message}`, 'error');
-      if ((window as any).__imageGenReject) {
-        (window as any).__imageGenReject(e);
-      }
+      imageGenCallbackRef.current?.reject(e instanceof Error ? e : new Error(message));
     } finally {
       setPendingImagePrompt(null);
-      (window as any).__imageGenResolve = null;
-      (window as any).__imageGenReject = null;
+      imageGenCallbackRef.current = null;
     }
   };
 
   const cancelImageGeneration = () => {
     setShowImageWarning(false);
     setPendingImagePrompt(null);
-    if ((window as any).__imageGenReject) {
-      (window as any).__imageGenReject(new Error('用户取消了图片生成'));
-      (window as any).__imageGenReject = null;
-      (window as any).__imageGenResolve = null;
-    }
-  };
-
-  const handleReplaceCode = async () => {
-    if (!newCode.trim()) {
-      showToast('请输入新的授权码', 'error');
-      return;
-    }
-    setReplacingCode(true);
-    try {
-      const response = await fetch('/api/auth/login', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ code: newCode.trim() }),
-      });
-      const data = await response.json();
-      if (data.success) {
-        showToast('授权码更换成功', 'success');
-        setShowCodeExhaustedModal(false);
-        setNewCode('');
-        setExhaustedMessage('');
-        // 刷新页面以更新状态
-        window.location.reload();
-      } else {
-        showToast(data.message || '授权码更换失败', 'error');
-      }
-    } catch {
-      showToast('授权码更换失败，请重试', 'error');
-    } finally {
-      setReplacingCode(false);
-    }
+    imageGenCallbackRef.current?.reject(new Error('用户取消了图片生成'));
+    imageGenCallbackRef.current = null;
   };
 
   const handleCopyToWeChat = async () => {
@@ -741,7 +693,7 @@ ${cleanResult}`;
                 <div 
                   className="prose prose-lg max-w-none prose-headings:font-bold prose-a:text-blue-600" 
                   style={{ fontSize: '16px', lineHeight: '2', color: '#374151' }}
-                  dangerouslySetInnerHTML={{ __html: marked.parse(article.content) as string }}
+                  dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(marked.parse(article.content) as string) }}
                 />
               ) : (
                 <div className="flex flex-col items-center justify-center py-24 text-gray-300">
@@ -783,7 +735,7 @@ ${cleanResult}`;
                     <span>牧咔AI</span><span>·</span><span>{new Date().toLocaleDateString('zh-CN')}</span>
                   </div>
                 </div>
-                <div className="px-5 pb-8" dangerouslySetInnerHTML={{ __html: previewHtml }} />
+                <div className="px-5 pb-8" dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(previewHtml) }} />
               </div>
             </div>
             <p className="text-center text-white/70 text-sm mt-4">点击任意处关闭</p>
@@ -835,66 +787,6 @@ ${cleanResult}`;
         </div>
       )}
 
-      {/* 授权码用完弹窗 */}
-      {showCodeExhaustedModal && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center animate-fade-in" onClick={() => { if (!replacingCode) setShowCodeExhaustedModal(false); }}>
-          <div className="bg-[#111113] border border-white/10 rounded-2xl shadow-2xl max-w-[420px] w-full p-6 animate-scale-in" onClick={(e) => e.stopPropagation()}>
-            <div className="w-12 h-12 bg-red-500/10 rounded-xl flex items-center justify-center mb-4">
-              <KeyRound className="text-red-400" size={24} />
-            </div>
-            <h3 className="text-lg font-bold text-white mb-2">授权码已用完</h3>
-            {exhaustedMessage && (
-              <p className="text-[14px] text-gray-400 leading-relaxed mb-5">
-                {exhaustedMessage}
-              </p>
-            )}
-            <div className="mb-5">
-              <label className="block text-[13px] font-medium text-gray-400 mb-2">输入新授权码</label>
-              <input
-                type="text"
-                value={newCode}
-                onChange={(e) => setNewCode(e.target.value)}
-                placeholder="请输入新的授权码"
-                disabled={replacingCode}
-                className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white text-[14px] placeholder:text-gray-600 outline-none focus:border-[#0070F3] focus:ring-1 focus:ring-[#0070F3]/30 transition-all disabled:opacity-50"
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' && !replacingCode) {
-                    handleReplaceCode();
-                  }
-                }}
-              />
-            </div>
-            <div className="flex gap-3">
-              <button
-                onClick={handleReplaceCode}
-                disabled={replacingCode || !newCode.trim()}
-                className="flex-1 py-3 bg-[#0070F3] text-white rounded-xl text-[14px] font-medium hover:bg-[#0060DF] transition-all shadow-sm disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
-              >
-                {replacingCode ? (
-                  <>
-                    <Loader2 size={16} className="animate-spin" />
-                    更换中...
-                  </>
-                ) : (
-                  '更换授权码'
-                )}
-              </button>
-              <button
-                onClick={() => {
-                  if (!replacingCode) {
-                    setShowCodeExhaustedModal(false);
-                    setNewCode('');
-                  }
-                }}
-                disabled={replacingCode}
-                className="flex-1 py-3 bg-white/5 border border-white/10 text-gray-400 rounded-xl text-[14px] font-medium hover:bg-white/10 hover:text-white transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                取消
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

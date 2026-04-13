@@ -4,14 +4,10 @@ import { verifyJWT } from '@/lib/jwt';
 import type { JWTPayload } from '@/lib/jwt';
 
 export async function middleware(request: NextRequest) {
-  console.log("Middleware Debug: Request to", request.nextUrl.pathname);
   const token = request.cookies.get('auth_token')?.value;
-  console.log("Middleware Debug: Token found:", token ? "YES (length: " + token.length + ")" : "NO");
   let payload: JWTPayload | null = null;
   if (token) {
-    console.log("Middleware Debug: About to verify JWT");
     payload = await verifyJWT(token);
-    console.log("Middleware Debug: JWT verification result:", payload ? "SUCCESS" : "FAILED");
   }
 
 

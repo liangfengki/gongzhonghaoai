@@ -10,18 +10,28 @@ export async function GET(req: NextRequest) {
   }
 
   try {
-    const users = await prisma.user.findMany({
-      select: {
-        id: true,
-        username: true,
-        email: true,
-        credits: true,
-        isAdmin: true,
-        createdAt: true,
-        _count: { select: { usageLogs: true } },
-      },
-      orderBy: { createdAt: 'desc' },
-    });
+    const { searchParams } = new URL(req.url);
+    const page = Math.max(1, parseInt(searchParams.get('page') || '1', 10));
+    const pageSize = Math.min(100, Math.max(1, parseInt(searchParams.get('pageSize') || '50', 10)));
+    const skip = (page - 1) * pageSize;
+
+    const [users, total] = await Promise.all([
+      prisma.user.findMany({
+        select: {
+          id: true,
+          username: true,
+          email: true,
+          credits: true,
+          isAdmin: true,
+          createdAt: true,
+          _count: { select: { usageLogs: true } },
+        },
+        orderBy: { createdAt: 'desc' },
+        skip,
+        take: pageSize,
+      }),
+      prisma.user.count(),
+    ]);
 
     const result = users.map(u => ({
       id: u.id,
@@ -33,7 +43,7 @@ export async function GET(req: NextRequest) {
       articleCount: u._count.usageLogs,
     }));
 
-    return NextResponse.json({ users: result });
+    return NextResponse.json({ users: result, total, page, pageSize });
   } catch (error) {
     console.error('Admin users error:', error);
     return NextResponse.json({ error: '获取用户列表失败' }, { status: 500 });

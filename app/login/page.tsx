@@ -19,7 +19,9 @@ function LoginForm() {
     if (errParam) {
       setError(`验证失败: ${errParam}`);
     }
-    fetch('/api/auth/logout', { method: 'POST' });
+    if (document.cookie.includes('auth_token')) {
+      fetch('/api/auth/logout', { method: 'POST' });
+    }
   }, [searchParams]);
 
   const handleSubmit = async (e: React.FormEvent) => {

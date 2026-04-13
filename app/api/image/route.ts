@@ -75,14 +75,9 @@ export async function POST(req: NextRequest) {
 
     const { imageBaseUrl, imageApiKey, imageModelName, apiKey, baseUrl } = settings;
 
-    let targetApiKey = imageApiKey || apiKey || process.env.IMAGE_API_KEY || 'sk-WyOMWvdkpnYR6tATd3cjOHi8TkzeHEMhPRxRR6acXhC5SkGy' || '';
-
-    // Force use built-in image API key if no valid custom key is provided
-    if (targetApiKey === 'demo' || !targetApiKey) {
-      targetApiKey = process.env.IMAGE_API_KEY || 'sk-WyOMWvdkpnYR6tATd3cjOHi8TkzeHEMhPRxRR6acXhC5SkGy' || '';
-    }
-    const targetBaseUrl = imageBaseUrl || baseUrl || process.env.NEXT_PUBLIC_IMAGE_API_BASE_URL || process.env.NEXT_PUBLIC_CHAT_API_BASE_URL || 'https://yunwu.ai/v1';
-    const targetModel = imageModelName || process.env.IMAGE_MODEL_NAME || 'gemini-3.1-flash-image-preview';
+    const targetApiKey = process.env.IMAGE_API_KEY || '';
+    const targetBaseUrl = process.env.NEXT_PUBLIC_IMAGE_API_BASE_URL || 'https://api.aiyungc.cn/v1';
+    const targetModel = process.env.IMAGE_MODEL_NAME || 'gemini-3.1-flash-image-preview';
 
     if (!targetApiKey) {
       return NextResponse.json({ error: { message: '请先配置图片生成 API Key' } }, { status: 401 });
@@ -93,16 +88,18 @@ export async function POST(req: NextRequest) {
       Authorization: `Bearer ${targetApiKey}`,
     };
 
-    const chatUrl = targetBaseUrl.replace(/\/$/, '').replace(/\/images\/generations$/, '') + '/chat/completions';
+    const endpoint = targetBaseUrl.replace(/\/$/, '') + '/chat/completions';
     const body = {
       model: targetModel,
-      messages: [{ role: 'user', content: `Generate an image: ${prompt}` }],
+      messages: [
+        { role: 'user', content: `Generate an image: ${prompt}` },
+      ],
       max_tokens: 4096,
     };
 
     let response: Response;
     try {
-      response = await fetch(chatUrl, {
+      response = await fetch(endpoint, {
         method: 'POST',
         headers,
         body: JSON.stringify(body),
@@ -110,7 +107,7 @@ export async function POST(req: NextRequest) {
       });
     } catch (fetchError: unknown) {
       const errMsg = fetchError instanceof Error ? fetchError.message : '未知错误';
-      console.error('Fetch failed:', chatUrl, errMsg);
+      console.error('Fetch failed:', endpoint, errMsg);
       return NextResponse.json(
         { error: { message: `网络连接失败: ${errMsg}` } },
         { status: 502 }
@@ -119,6 +116,7 @@ export async function POST(req: NextRequest) {
 
     if (!response.ok) {
       const errorText = await response.text();
+      console.error('Image API upstream error:', response.status, errorText.slice(0, 500));
       try {
         return NextResponse.json(JSON.parse(errorText), { status: response.status });
       } catch {

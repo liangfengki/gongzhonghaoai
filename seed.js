@@ -4,7 +4,11 @@ const bcrypt = require('bcryptjs');
 const prisma = new PrismaClient();
 
 async function main() {
-  const adminPassword = process.env.SUPERADMIN_PASSWORD || 'admin123456';
+  const adminPassword = process.env.SUPERADMIN_PASSWORD;
+  if (!adminPassword) {
+    console.error('Error: SUPERADMIN_PASSWORD environment variable is required');
+    process.exit(1);
+  }
   const hashedPassword = await bcrypt.hash(adminPassword, 10);
 
   // Always create admin + liangfengki as superadmins
