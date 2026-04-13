@@ -28,6 +28,9 @@ export default function Nav() {
 
   return (
     <header className="bg-white/80 backdrop-blur-xl sticky top-0 z-50 shadow-[0_1px_3px_rgba(0,0,0,0.04)]">
+      <div className="bg-gradient-to-r from-blue-600 to-indigo-600 text-white text-center text-[13px] py-1.5 font-medium">
+        需要积分可以添加微信「xdklt0528」
+      </div>
       <div className="max-w-5xl mx-auto px-6 h-16 flex items-center justify-between">
         <Link href="/" className="flex items-center gap-2.5 group">
           <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-blue-500 to-blue-700 flex items-center justify-center shadow-sm">
