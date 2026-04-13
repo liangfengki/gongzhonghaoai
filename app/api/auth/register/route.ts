@@ -34,7 +34,7 @@ export async function POST(req: NextRequest) {
 
     const hashed = await bcrypt.hash(password, 10);
     const user = await prisma.user.create({
-      data: { username, email, password: hashed, credits: 50 },
+      data: { username, email, password: hashed, credits: 100 },
     });
 
     const token = await createJWT({
