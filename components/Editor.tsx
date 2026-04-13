@@ -86,22 +86,27 @@ export function extractImages(content: string): { text: string; images: Extracte
 }
 
 export function restoreImages(text: string, images: ExtractedImage[]): string {
+  if (images.length === 0) return text;
+
   let restored = text;
-  const missingImages: ExtractedImage[] = [];
 
-  images.forEach(img => {
-    const innerId = img.id.slice(1, -1);
-
-    restored = restored.split(`\\[${innerId}\\]`).join(img.id);
-    restored = restored.split(`\`${img.id}\``).join(img.id);
-    restored = restored.split(`**${img.id}**`).join(img.id);
-
+  // First try to find and replace [IMG_X] markers (any number, not just original)
+  for (const img of images) {
+    // Try original id first
     if (restored.includes(img.id)) {
       restored = restored.split(img.id).join(img.original);
-    } else {
-      missingImages.push(img);
+      continue;
     }
-  });
+    // Try any [IMG_N] pattern and replace with first match
+    const imgMatch = restored.match(/\[IMG_\d+\]/);
+    if (imgMatch) {
+      restored = restored.split(imgMatch[0]).join(img.original);
+    }
+  }
+
+  // Check which images are still missing
+  const restoredCheck = restored;
+  const missingImages = images.filter(img => !restoredCheck.includes(img.original));
 
   if (missingImages.length > 0) {
     const paragraphs = restored.split(/\n{2,}/);
