@@ -13,10 +13,12 @@ import {
   Loader2, FileText, Send, Copy, Check, Sparkles,
   Briefcase, Coffee, BookOpen,
   Palette, Smartphone, ChevronDown, Eye, Edit3,
-  Wand2, Plus, Type, Image as ImageIcon
+  Wand2, Plus, Type, Image as ImageIcon, RotateCcw, LayoutTemplate,
+  Coins, History, ChevronRight
 } from 'lucide-react';
 import NextLink from 'next/link';
 import TiptapEditor from './TiptapEditor';
+import type { ArticleTemplate } from '@/lib/templates';
 
 const ArticleOptimizer = lazy(() => import('@/components/ArticleOptimizer'));
 
@@ -147,6 +149,20 @@ export default function Editor() {
     optimize: false,
   });
   const researchPromiseRef = useRef<Promise<string> | null>(null);
+  // Credits
+  const [remainingCredits, setRemainingCredits] = useState<number | null>(null);
+  // Templates
+  const [showTemplatePicker, setShowTemplatePicker] = useState(false);
+  const [templates, setTemplates] = useState<ArticleTemplate[]>([]);
+  // Paragraph regeneration
+  const [regeneratingParagraph, setRegeneratingParagraph] = useState<number | null>(null);
+  const [regenInstruction, setRegenInstruction] = useState('');
+  const [showRegenInput, setShowRegenInput] = useState<number | null>(null);
+  // Version history
+  const [showVersions, setShowVersions] = useState(false);
+  const [versions, setVersions] = useState<Array<{id: string; version: number; note: string; createdAt: string}>>([]);
+  // Auto-save debounce
+  const autoSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const article = articles.find((a) => a.id === currentArticleId);
   const tone: WritingTone = article?.tone || 'professional';
@@ -217,6 +233,122 @@ export default function Editor() {
     }
   };
 
+  // Auto-save to server
+  const autoSaveToServer = useCallback((articleId: string) => {
+    if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current);
+    autoSaveTimerRef.current = setTimeout(() => {
+      useArticleStore.getState().syncToServer(articleId).catch(console.error);
+    }, 2000);
+  }, []);
+
+  // Fetch user credits
+  useEffect(() => {
+    fetch('/api/auth/me').then(r => r.json()).then(data => {
+      if (data.user?.credits !== undefined) setRemainingCredits(data.user.credits);
+    }).catch(() => {});
+  }, []);
+
+  // Load templates
+  useEffect(() => {
+    fetch('/api/templates').then(r => r.json()).then(data => {
+      if (data.templates) setTemplates(data.templates);
+    }).catch(() => {});
+  }, []);
+
+  // Load versions
+  const loadVersions = useCallback(async () => {
+    if (!article?._serverId) return;
+    try {
+      const res = await fetch(`/api/articles/${article._serverId}/versions`);
+      const data = await res.json();
+      if (data.versions) setVersions(data.versions);
+    } catch {}
+  }, [article?._serverId]);
+
+  // Restore version
+  const handleRestoreVersion = async (versionId: string) => {
+    if (!article?._serverId) return;
+    try {
+      const res = await fetch(`/api/articles/${article._serverId}/versions`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ versionId }),
+      });
+      const data = await res.json();
+      if (data.article) {
+        updateArticle(article.id, { content: data.article.content });
+        showToast('已恢复到历史版本', 'success');
+        setShowVersions(false);
+      }
+    } catch {
+      showToast('恢复失败', 'error');
+    }
+  };
+
+  // Apply template
+  const handleApplyTemplate = (template: ArticleTemplate) => {
+    if (!article) return;
+    updateArticle(article.id, {
+      outline: template.outline,
+      tone: template.tone as WritingTone,
+    });
+    setShowTemplatePicker(false);
+    showToast(`已应用「${template.name}」模板`, 'success');
+  };
+
+  // Regenerate paragraph
+  const handleRegenerateParagraph = async (paragraphIndex: number) => {
+    if (!article?.content || regeneratingParagraph !== null) return;
+    setRegeneratingParagraph(paragraphIndex);
+    setShowRegenInput(null);
+
+    try {
+      const response = await fetch('/api/regenerate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          articleContent: article.content,
+          paragraphIndex,
+          instruction: regenInstruction,
+          settings,
+          tone,
+          stream: true,
+        }),
+      });
+
+      if (!response.ok) {
+        const err = await response.json();
+        throw new Error(err.error?.message || '重新生成失败');
+      }
+
+      // Update credits from response header
+      const newCredits = response.headers.get('X-Remaining-Credits');
+      if (newCredits) setRemainingCredits(parseInt(newCredits));
+
+      // Stream the regenerated paragraph
+      let newParagraph = '';
+      for await (const chunk of parseSSEStream(response)) {
+        newParagraph += chunk;
+      }
+
+      if (newParagraph.trim()) {
+        // Replace the paragraph in the article
+        const paragraphs = article.content.split(/\n{2,}/);
+        paragraphs[paragraphIndex] = newParagraph.trim();
+        const newContent = paragraphs.join('\n\n');
+        updateArticle(article.id, { content: newContent });
+        autoSaveToServer(article.id);
+        showToast('段落已重新生成', 'success');
+      }
+    } catch (e: unknown) {
+      const message = e instanceof Error ? e.message : '未知错误';
+      showToast(`重新生成失败: ${message}`, 'error');
+    } finally {
+      setRegeneratingParagraph(null);
+      setRegenInstruction('');
+    }
+  };
+
   const handleGenerateOutline = async () => {
     if (actionLockRef.current.outline || loading) return;
     actionLockRef.current.outline = true;
@@ -271,10 +403,10 @@ ${research || '未搜索到相关资料，请根据话题自行构思'}
 
       const outline = article.outline;
 
-      // Single call with strong research emphasis
-      const prompt = `你是AI内容仿写与去痕专家，擅长写出像真人一样的爆款公众号文章。请根据以下真实资料，围绕"${article.topic}"撰写一篇有深度的文章。
+      // Single streaming call with deai rules integrated
+      const prompt = `你是一位公众号写手，擅长写出像真人一样的爆款文章。请根据以下真实资料，围绕"${article.topic}"撰写一篇有深度的文章。
 
-真实资料（这是从网上搜索到的真实信息，必须基于这些内容写作）：
+真实资料：
 ---
 ${research || '无'}
 ---
@@ -282,72 +414,51 @@ ${research || '无'}
 文章大纲：
 ${outline.map((o, i) => `${i + 1}. ${o}`).join('\n')}
 
-写作规则：
-1. 【最重要】文章内容必须基于上面的真实资料，引用资料中的具体事实、数据、观点
+写作要求：
+1. 内容必须基于上面的真实资料，引用具体事实、数据、观点
 2. 不要编造内容，不要写空泛的套话
-3. 对资料中的每个关键点进行展开解读
-4. 每个段落至少 200 字，要有具体的案例或数据
-5. 总字数 1500-2500 字
-6. 使用 Markdown 格式，带标题层级
-7. 在合适位置插入 2-3 个图片占位符：![IMAGE_PROMPT: 描述](placeholder)
-8. 写作风格：${TONE_PROMPTS[tone]}
+3. 每个段落至少 200 字，要有具体的案例或数据
+4. 总字数 1500-2500 字
+5. 使用 Markdown 格式，带标题层级
+6. 在合适位置插入 2-3 个图片占位符：![IMAGE_PROMPT: 描述](placeholder)
+7. 写作风格：${TONE_PROMPTS[tone]}
 
-【去痕硬规则——违反任何一条即失败】
-9. 严禁使用AI高频词：首先、其次、最后、想象一下、综上所述、值得注意的是、需要指出的是、显而易见、毋庸置疑、由此可见、与此同时、在此基础上、从长远来看、总体而言、换言之、简而言之、不可否认、总而言之
-10. 严禁使用AI黑话（必须替换成括号里的口语）：赋能（→帮到）、底层逻辑（→根本原因）、颗粒度（→细节）、闭环（→兜底）、抓手（→切入点）、深耕（→一直做）、赛道（→领域）、痛点（→头疼的事）、维度（→角度）、协同（→配合）、对齐（→对上）、沉淀（→积累）、链路（→流程）、触达（→到达）、心智（→想法）、打法（→做法）、组合拳（→一套办法）、差异化（→不一样）、助力（→帮着）、旨在（→就是想）、聚焦（→盯着）、显著（→实打实）、生态（→圈子）、矩阵（→一套组合）、势能（→势头）、体系化（→系统）、复用（→重复用）、新常态（→现在的常态）、结构性（→根本上的）、战略性（→关键的）
-11. 长句拆分：把超过20字的长句拆成2-3个短句，用逗号、分号或破折号衔接，制造呼吸感
-12. 所有句子必须有主语，表达简单直接
-13. 适当使用"因为、所以、不过、但是、说白了、其实吧"等简单连接词
-14. 每隔200-300字插入一句人类思考/吐槽："说实话我一开始也没想到""实操下来发现""这里其实有点反直觉""你可能会觉得奇怪""我之前也踩过这个坑"
-15. 标题仿写：关键词替换+句式改变（陈述改疑问/感叹），禁止"XX指南""XX分析""XX解读"这种官方标题
-16. 段落改写：重新组织结构，用自己的话重述，加入新信息或论据
-17. 结论重写：加入行动号召或情感升华
-18. 每段感叹号最多1个，多余的换成句号或问号
-19. 专业术语保留但不用生僻字，语言自然口语化`;
+【去AI味硬规则】
+8. 严禁使用：首先、其次、最后、想象一下、综上所述、值得注意的是、需要指出的是、显而易见、毋庸置疑、由此可见、与此同时、在此基础上、从长远来看、总体而言、换言之、简而言之、不可否认、总而言之
+9. 严禁使用AI黑话，用口语替代：赋能→帮到、底层逻辑→根本原因、颗粒度→细节、闭环→兜底、抓手→切入点、深耕→一直做、赛道→领域、痛点→头疼的事、维度→角度、协同→配合、沉淀→积累、链路→流程、触达→到达、心智→想法、打法→做法、组合拳→一套办法、差异化→不一样、助力→帮着、旨在→就是想、聚焦→盯着、显著→实打实、生态→圈子、矩阵→一套组合、势能→势头、体系化→系统、复用→重复用
+10. 长句拆分：超过20字的句子拆成短句，用逗号或破折号衔接
+11. 所有句子必须有主语，表达简单直接
+12. 适当使用"因为、所以、不过、但是、说白了、其实吧"等简单连接词
+13. 每隔200-300字插入一句人类思考/吐槽，如"说实话我一开始也没想到""实操下来发现""这里其实有点反直觉"
+14. 标题禁止"XX指南""XX分析""XX解读"这种官方风格
+15. 每段感叹号最多1个
+16. 语言自然口语化，像朋友聊天`;
 
       showToast('正在生成文章...', 'info');
-      const rawContent = await generateText([{ role: 'user', content: prompt }], settings, 20);
-      let cleanResult = cleanAIOutput(rawContent);
+      const response = await generateTextStream([{ role: 'user', content: prompt }], settings, 20);
 
-      // 自动生成后自动用版本二（三段整句版）改写
-      if (cleanResult) {
-        showToast('正在改写文章...', 'info');
-        // 先提取图片占位符，改写后再恢复
-        const { text: textWithoutImages, images: extractedImages } = extractImages(cleanResult);
-        const rewritePrompt = `请对提供的文案深度改写，严格执行以下规则，违者重罚：
-
-1. 100%保留原文核心观点、情绪、细节、逻辑，不改动原意、不增删内容、不调整顺序，改写后更戳人、氛围感拉满，纯真人质感、零AI痕迹。
-2. 全文整合为三大完整段落（开篇点题+中间拆解+结尾升华），不拆分长句、不打散段落、不新增分段，仅适度润色流畅度，字数浮动10%-15%。
-3. 彻底删除AI通用套话、模板化抒情词，拒绝对称句式、完美排比，保留自然真人语气，不强行逻辑闭环。
-4. 禁用：所以、因此、于是、其实等AI连接词；十分、非常、极其等极致修饰词。
-5. 严格保留三段结构，仅输出改写后的正文。
-6. 【必须保留】文中的所有 [IMG_X] 标记必须原封不动保留在原来的位置，绝对不能删除、修改或移动。
-
-版本二：三段整句版（复刻软件风格/规整长文通用）
-
-原文：
-${textWithoutImages}`;
-
-        try {
-          const rewritten = await generateText([{ role: 'user', content: rewritePrompt }], settings, 10);
-          let finalResult = cleanAIOutput(rewritten);
-          if (finalResult && finalResult.trim().length > 50) {
-            cleanResult = restoreImages(finalResult, extractedImages);
-          } else {
-            cleanResult = restoreImages(cleanResult, extractedImages);
-          }
-        } catch {
-          console.warn('改写失败，使用原始生成结果');
-          cleanResult = restoreImages(cleanResult, extractedImages);
+      let accumulated = '';
+      for await (const chunk of parseSSEStream(response)) {
+        accumulated += chunk;
+        let cleaned = cleanAIOutput(accumulated);
+        if (cleaned.trim()) {
+          updateArticle(article.id, { content: cleaned });
         }
       }
 
-      if (cleanResult) {
-        updateArticle(article.id, { content: cleanResult });
+      let finalContent = cleanAIOutput(accumulated);
+      if (finalContent) {
+        updateArticle(article.id, { content: finalContent });
+        autoSaveToServer(article.id);
+        // Refresh credits
+        fetch('/api/auth/me').then(r => r.json()).then(data => {
+          if (data.user?.credits !== undefined) setRemainingCredits(data.user.credits);
+        }).catch(() => {});
       }
       showToast('正文生成完成', 'success');
-    } catch {
-      showToast('生成正文失败，请检查 API 设置', 'error');
+    } catch (e: unknown) {
+      const message = e instanceof Error ? e.message : '未知错误';
+      showToast(`生成正文失败: ${message}`, 'error');
     } finally {
       setLoading(false);
       setStreaming(false);
@@ -548,6 +659,32 @@ ${textWithoutImages}`;
         </div>
 
         <div className="flex items-center gap-2.5">
+          {/* Credits display */}
+          {remainingCredits !== null && (
+            <div className="flex items-center gap-1.5 px-3 py-1.5 bg-amber-50 rounded-lg text-[13px] font-medium text-amber-700">
+              <Coins size={14} />
+              <span>{remainingCredits.toLocaleString()}</span>
+            </div>
+          )}
+
+          {/* Template picker button */}
+          {article.outline.length === 0 && !article.content && (
+            <button onClick={() => setShowTemplatePicker(true)}
+              className="flex items-center gap-1.5 px-3 py-2 text-purple-600 rounded-lg text-[13px] font-medium hover:bg-purple-50 transition-all">
+              <LayoutTemplate size={14} />
+              模板
+            </button>
+          )}
+
+          {/* Version history button */}
+          {article._serverId && article.content && (
+            <button onClick={() => { setShowVersions(true); loadVersions(); }}
+              className="flex items-center gap-1.5 px-3 py-2 text-gray-500 rounded-lg text-[13px] font-medium hover:bg-gray-100 transition-all">
+              <History size={14} />
+              历史
+            </button>
+          )}
+
           {article.outline.length === 0 && (article.content || forceEdit) && (
             <button onClick={handleGenerateOutline} disabled={loading}
               className="flex items-center gap-1.5 px-4 py-2 bg-blue-50 text-blue-600 rounded-lg text-[13px] font-medium hover:bg-blue-100 transition-all disabled:opacity-50">
@@ -644,6 +781,26 @@ ${textWithoutImages}`;
             </div>
           )}
 
+          {/* Paragraph management view (when article has content) */}
+          {article.content && editMode === 'edit' && (
+            <div className="mb-6">
+              <div className="flex items-center gap-2 mb-3">
+                <button
+                  onClick={() => setShowRegenInput(showRegenInput === -1 ? null : -1)}
+                  className="flex items-center gap-1.5 px-3 py-1.5 text-[12px] font-medium text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-all"
+                >
+                  <RotateCcw size={12} />
+                  段落重写
+                </button>
+              </div>
+              {showRegenInput === -1 && (
+                <div className="mb-4 p-4 bg-amber-50 rounded-xl border border-amber-100">
+                  <p className="text-xs text-amber-700 font-medium mb-2">选择要重写的段落（在编辑器中点击段落旁的重写按钮）</p>
+                </div>
+              )}
+            </div>
+          )}
+
           {/* Visual Editor or Empty State */}
           {article.outline.length === 0 && !article.content && !forceEdit ? (
             <div className="bg-white rounded-2xl shadow-sm border border-gray-100 flex flex-col items-center justify-center p-12 min-h-[450px] animate-fade-in mt-10">
@@ -715,6 +872,81 @@ ${textWithoutImages}`;
             </div>
           )}
 
+          {/* Paragraph regeneration panel */}
+          {article.content && (
+            <div className="mt-8 bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
+              <div className="flex items-center justify-between mb-4">
+                <div className="flex items-center gap-2">
+                  <RotateCcw size={16} className="text-gray-400" />
+                  <span className="text-sm font-semibold text-gray-700">段落管理</span>
+                  <span className="text-[11px] text-gray-400">点击段落旁的按钮重新生成</span>
+                </div>
+              </div>
+              <div className="space-y-3">
+                {article.content.split(/\n{2,}/).map((para, idx) => {
+                  const trimmed = para.trim();
+                  if (!trimmed) return null;
+                  const isImage = /^!\[/.test(trimmed);
+                  const displayText = trimmed.replace(/!\[([^\]]*)\]\([^)]+\)/g, '[图片]').slice(0, 120);
+                  return (
+                    <div key={idx} className="group">
+                      <div className="flex items-start gap-3 p-3 rounded-xl hover:bg-gray-50 transition-all">
+                        <span className="w-6 h-6 rounded-md bg-gray-100 text-gray-500 text-[11px] font-bold flex items-center justify-center flex-shrink-0 mt-0.5">
+                          {idx + 1}
+                        </span>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-[13px] text-gray-600 leading-relaxed line-clamp-2">{displayText}</p>
+                          {regeneratingParagraph === idx && (
+                            <div className="flex items-center gap-2 mt-2">
+                              <Loader2 size={12} className="animate-spin text-blue-500" />
+                              <span className="text-[11px] text-blue-500">正在重新生成...</span>
+                            </div>
+                          )}
+                          {showRegenInput === idx && (
+                            <div className="mt-3 p-3 bg-amber-50 rounded-lg border border-amber-100">
+                              <input
+                                type="text"
+                                value={regenInstruction}
+                                onChange={(e) => setRegenInstruction(e.target.value)}
+                                placeholder="可选：输入改写要求（留空则自动改写）"
+                                className="w-full px-3 py-2 bg-white border border-amber-200 rounded-lg text-sm outline-none focus:ring-2 focus:ring-amber-300/30"
+                                onKeyDown={(e) => e.key === 'Enter' && handleRegenerateParagraph(idx)}
+                              />
+                              <div className="flex gap-2 mt-2">
+                                <button
+                                  onClick={() => handleRegenerateParagraph(idx)}
+                                  disabled={regeneratingParagraph !== null}
+                                  className="px-3 py-1.5 bg-amber-500 text-white rounded-lg text-xs font-medium hover:bg-amber-600 disabled:opacity-50"
+                                >
+                                  开始重写
+                                </button>
+                                <button
+                                  onClick={() => { setShowRegenInput(null); setRegenInstruction(''); }}
+                                  className="px-3 py-1.5 text-gray-500 text-xs hover:text-gray-700"
+                                >
+                                  取消
+                                </button>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                        {!isImage && regeneratingParagraph === null && showRegenInput !== idx && (
+                          <button
+                            onClick={() => setShowRegenInput(idx)}
+                            className="opacity-0 group-hover:opacity-100 flex items-center gap-1 px-2 py-1 text-[11px] text-amber-600 bg-amber-50 rounded-md hover:bg-amber-100 transition-all flex-shrink-0"
+                          >
+                            <RotateCcw size={10} />
+                            重写
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
           <div className="h-20" />
         </div>
       </div>
@@ -757,6 +989,83 @@ ${textWithoutImages}`;
             onClose={() => setShowOptimizer(false)}
           />
         </Suspense>
+      )}
+
+      {/* Template Picker Modal */}
+      {showTemplatePicker && (
+        <div className="fixed inset-0 bg-black/40 backdrop-blur-[2px] z-50 flex items-center justify-center animate-fade-in" onClick={() => setShowTemplatePicker(false)}>
+          <div className="bg-white rounded-2xl shadow-2xl max-w-[560px] w-full max-h-[80vh] overflow-hidden animate-scale-in" onClick={(e) => e.stopPropagation()}>
+            <div className="p-6 border-b border-gray-100">
+              <h3 className="text-lg font-bold text-gray-900">选择文章模板</h3>
+              <p className="text-sm text-gray-500 mt-1">选择一个模板快速开始，AI 会根据模板结构生成文章</p>
+            </div>
+            <div className="p-6 overflow-y-auto max-h-[60vh]">
+              <div className="grid grid-cols-2 gap-3">
+                {templates.map((template) => (
+                  <button
+                    key={template.id}
+                    onClick={() => handleApplyTemplate(template)}
+                    className="p-4 bg-gray-50 rounded-xl border border-gray-100 hover:border-purple-200 hover:bg-purple-50/50 text-left transition-all group"
+                  >
+                    <div className="flex items-center gap-2 mb-2">
+                      <span className="text-sm font-semibold text-gray-800 group-hover:text-purple-700">{template.name}</span>
+                      <span className="text-[10px] px-1.5 py-0.5 bg-gray-200 text-gray-500 rounded-md">{template.category}</span>
+                    </div>
+                    <p className="text-[12px] text-gray-500 leading-relaxed">{template.description}</p>
+                    <div className="mt-2 flex flex-wrap gap-1">
+                      {template.outline.slice(0, 3).map((item, i) => (
+                        <span key={i} className="text-[10px] px-1.5 py-0.5 bg-white text-gray-400 rounded border border-gray-100">{item.slice(0, 8)}...</span>
+                      ))}
+                    </div>
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div className="p-4 border-t border-gray-100 flex justify-end">
+              <button onClick={() => setShowTemplatePicker(false)} className="px-4 py-2 text-sm text-gray-500 hover:text-gray-700">取消</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Version History Modal */}
+      {showVersions && (
+        <div className="fixed inset-0 bg-black/40 backdrop-blur-[2px] z-50 flex items-center justify-center animate-fade-in" onClick={() => setShowVersions(false)}>
+          <div className="bg-white rounded-2xl shadow-2xl max-w-[420px] w-full max-h-[70vh] overflow-hidden animate-scale-in" onClick={(e) => e.stopPropagation()}>
+            <div className="p-6 border-b border-gray-100">
+              <h3 className="text-lg font-bold text-gray-900">历史版本</h3>
+              <p className="text-sm text-gray-500 mt-1">每次保存内容变更时自动创建版本</p>
+            </div>
+            <div className="p-4 overflow-y-auto max-h-[50vh]">
+              {versions.length === 0 ? (
+                <div className="flex flex-col items-center py-8 text-gray-400">
+                  <History size={32} className="mb-2 text-gray-300" />
+                  <p className="text-sm">暂无历史版本</p>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {versions.map((v) => (
+                    <div key={v.id} className="flex items-center justify-between p-3 rounded-xl hover:bg-gray-50 transition-all">
+                      <div>
+                        <p className="text-sm font-medium text-gray-700">版本 {v.version}</p>
+                        <p className="text-[11px] text-gray-400">{v.note} · {new Date(v.createdAt).toLocaleString('zh-CN')}</p>
+                      </div>
+                      <button
+                        onClick={() => handleRestoreVersion(v.id)}
+                        className="px-3 py-1.5 text-[12px] text-blue-600 bg-blue-50 rounded-lg hover:bg-blue-100 transition-all"
+                      >
+                        恢复
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+            <div className="p-4 border-t border-gray-100 flex justify-end">
+              <button onClick={() => setShowVersions(false)} className="px-4 py-2 text-sm text-gray-500 hover:text-gray-700">关闭</button>
+            </div>
+          </div>
+        </div>
       )}
 
       {/* Image Generation Warning Dialog */}

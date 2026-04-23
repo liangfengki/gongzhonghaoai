@@ -4,14 +4,23 @@ import Nav from '@/components/Nav';
 import TopicSelector from '@/components/TopicSelector';
 import { useArticleStore } from '@/lib/store';
 import { useRouter } from 'next/navigation';
-import { Clock, ArrowRight, FileText, Trash2 } from 'lucide-react';
-import { useState } from 'react';
+import { Clock, ArrowRight, FileText, Trash2, Coins } from 'lucide-react';
+import { useState, useEffect } from 'react';
 
 export default function Home() {
-  const { articles, setCurrentArticle, deleteArticle } = useArticleStore();
+  const { articles, setCurrentArticle, deleteArticle, loadFromServer } = useArticleStore();
   const router = useRouter();
   const recentArticles = articles.slice(0, 6);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [credits, setCredits] = useState<number | null>(null);
+
+  // Load articles from server and fetch credits on mount
+  useEffect(() => {
+    loadFromServer();
+    fetch('/api/auth/me').then(r => r.json()).then(data => {
+      if (data.user?.credits !== undefined) setCredits(data.user.credits);
+    }).catch(() => {});
+  }, [loadFromServer]);
 
   const handleOpenArticle = (id: string) => {
     setCurrentArticle(id);
@@ -52,6 +61,12 @@ export default function Home() {
               <br className="hidden sm:block" />
               一键复制到公众号后台。
             </p>
+            {credits !== null && (
+              <div className="mt-4 inline-flex items-center gap-1.5 px-3 py-1.5 bg-amber-50 rounded-full text-amber-700 text-sm font-medium">
+                <Coins size={14} />
+                <span>{credits.toLocaleString()} 积分</span>
+              </div>
+            )}
           </div>
         </div>
 

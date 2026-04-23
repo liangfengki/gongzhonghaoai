@@ -4,8 +4,7 @@ generator client {
 
 datasource db {
   provider  = "postgresql"
-  url       = env("POSTGRES_PRISMA_URL")
-  directUrl = env("POSTGRES_URL_NON_POOLING")
+  url       = env("DATABASE_URL")
 }
 
 model User {
@@ -17,6 +16,7 @@ model User {
   isAdmin    Boolean         @default(false)
   settings   UserSettings?
   usageLogs  UsageLog[]
+  articles   Article[]
   createdAt  DateTime        @default(now())
   updatedAt  DateTime        @updatedAt
 }
@@ -40,4 +40,37 @@ model UsageLog {
 
   @@index([userId])
   @@index([createdAt])
+}
+
+model Article {
+  id          String          @id @default(cuid())
+  userId      String
+  user        User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  title       String
+  outline     String          @default("[]")  // JSON array of outline items
+  content     String          @default("")
+  tone        String          @default("professional")
+  theme       String          @default("tech")
+  isOptimized Boolean         @default(false)
+  isFavorite  Boolean         @default(false)
+  versions    ArticleVersion[]
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+
+  @@index([userId])
+  @@index([createdAt])
+}
+
+model ArticleVersion {
+  id        String   @id @default(cuid())
+  articleId String
+  article   Article  @relation(fields: [articleId], references: [id], onDelete: Cascade)
+  content   String
+  outline   String   @default("[]")
+  version   Int
+  note      String   @default("")
+  createdAt DateTime @default(now())
+
+  @@unique([articleId, version])
+  @@index([articleId])
 }
