@@ -179,7 +179,7 @@ export const useArticleStore = create<ArticleStore>()(
       },
     }),
     {
-      name: '01agent-storage',
+      name: 'muka-storage',
     }
   )
 );

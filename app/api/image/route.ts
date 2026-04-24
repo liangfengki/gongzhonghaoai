@@ -76,7 +76,7 @@ export async function POST(req: NextRequest) {
     const { imageBaseUrl, imageApiKey, imageModelName, apiKey, baseUrl } = settings;
 
     const targetApiKey = process.env.IMAGE_API_KEY || '';
-    const targetBaseUrl = process.env.NEXT_PUBLIC_IMAGE_API_BASE_URL || 'https://api.aiyungc.cn/v1';
+    const targetBaseUrl = process.env.NEXT_PUBLIC_IMAGE_API_BASE_URL || '';
     const targetModel = process.env.IMAGE_MODEL_NAME || 'gemini-3.1-flash-image-preview';
 
     if (!targetApiKey) {

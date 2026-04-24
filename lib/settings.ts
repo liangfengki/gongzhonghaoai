@@ -46,7 +46,7 @@ export const useSettings = () => {
         if (data.settings) {
           setSettings(sanitizeSettings(data.settings));
         } else {
-          const saved = localStorage.getItem('01agent_settings');
+          const saved = localStorage.getItem('muka_settings');
           if (saved) {
             try {
               setSettings(sanitizeSettings(JSON.parse(saved)));
@@ -57,7 +57,7 @@ export const useSettings = () => {
         }
       } catch (error) {
         console.error('Failed to load settings from database:', error);
-        const saved = localStorage.getItem('01agent_settings');
+        const saved = localStorage.getItem('muka_settings');
         if (saved) {
           try {
             setSettings(sanitizeSettings(JSON.parse(saved)));
@@ -76,7 +76,7 @@ export const useSettings = () => {
   const saveSettings = async (newSettings: AISettings) => {
     const sanitized = sanitizeSettings(newSettings);
     setSettings(sanitized);
-    localStorage.setItem('01agent_settings', JSON.stringify(sanitized));
+    localStorage.setItem('muka_settings', JSON.stringify(sanitized));
 
     try {
       await fetch('/api/settings', {
