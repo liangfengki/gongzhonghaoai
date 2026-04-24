@@ -140,9 +140,7 @@ export default function Editor() {
   const [researchData, setResearchData] = useState<string>('');
   const [researching, setResearching] = useState(false);
   const [forceEdit, setForceEdit] = useState(false);
-  const [showImageWarning, setShowImageWarning] = useState(false);
-  const [pendingImagePrompt, setPendingImagePrompt] = useState<string | null>(null);
-  const imageGenCallbackRef = useRef<{ resolve: (url: string) => void; reject: (err: Error) => void } | null>(null);
+
   const actionLockRef = useRef({
     outline: false,
     fullText: false,
@@ -513,48 +511,17 @@ ${outline.map((o, i) => `${i + 1}. ${o}`).join('\n')}
 
   const handleGenerateImageRequest = (prompt: string) => {
     return new Promise<string>((resolve, reject) => {
-      if (!article?.isOptimized && article?.content) {
-        setPendingImagePrompt(prompt);
-        setShowImageWarning(true);
-        imageGenCallbackRef.current = { resolve, reject };
-      } else {
-        generateImage(prompt, settings)
-          .then(url => {
-            showToast('图片生成完成', 'success');
-            resolve(url);
-          })
-          .catch(e => {
-            const message = e instanceof Error ? e.message : '未知错误';
-            showToast(`生成图片失败: ${message}`, 'error');
-            reject(e);
-          });
-      }
+      generateImage(prompt, settings)
+        .then(url => {
+          showToast('图片生成完成', 'success');
+          resolve(url);
+        })
+        .catch(e => {
+          const message = e instanceof Error ? e.message : '未知错误';
+          showToast(`生成图片失败: ${message}`, 'error');
+          reject(e);
+        });
     });
-  };
-
-  const proceedWithImageGeneration = async () => {
-    setShowImageWarning(false);
-    if (!pendingImagePrompt) return;
-
-    try {
-      const url = await generateImage(pendingImagePrompt, settings);
-      showToast('图片生成完成', 'success');
-      imageGenCallbackRef.current?.resolve(url);
-    } catch (e) {
-      const message = e instanceof Error ? e.message : '未知错误';
-      showToast(`生成图片失败: ${message}`, 'error');
-      imageGenCallbackRef.current?.reject(e instanceof Error ? e : new Error(message));
-    } finally {
-      setPendingImagePrompt(null);
-      imageGenCallbackRef.current = null;
-    }
-  };
-
-  const cancelImageGeneration = () => {
-    setShowImageWarning(false);
-    setPendingImagePrompt(null);
-    imageGenCallbackRef.current?.reject(new Error('用户取消了图片生成'));
-    imageGenCallbackRef.current = null;
   };
 
   const handleCopyToWeChat = async () => {
@@ -937,36 +904,6 @@ ${outline.map((o, i) => `${i + 1}. ${o}`).join('\n')}
             </div>
             <div className="p-4 border-t border-gray-100 flex justify-end">
               <button onClick={() => setShowVersions(false)} className="px-4 py-2 text-sm text-gray-500 hover:text-gray-700">关闭</button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Image Generation Warning Dialog */}
-      {showImageWarning && (
-        <div className="fixed inset-0 bg-black/40 backdrop-blur-[2px] z-50 flex items-center justify-center animate-fade-in" onClick={cancelImageGeneration}>
-          <div className="bg-white rounded-2xl shadow-2xl max-w-[400px] w-full p-6 animate-scale-in" onClick={(e) => e.stopPropagation()}>
-            <div className="w-12 h-12 bg-amber-50 rounded-xl flex items-center justify-center mb-4">
-              <ImageIcon className="text-amber-500" size={24} />
-            </div>
-            <h3 className="text-lg font-bold text-gray-900 mb-2">建议先优化文章</h3>
-            <p className="text-[15px] text-gray-500 leading-relaxed mb-6">
-              由于文章在优化改写后，可能会增加或减少字数，导致原先生成的图片位置变得不协调。建议您先进行「文章优化」，待排版确认无误后再统一生成图片。
-            </p>
-            <div className="flex flex-col gap-3">
-              <button
-                onClick={proceedWithImageGeneration}
-                className="w-full py-3 bg-blue-600 text-white rounded-xl text-[15px] font-medium hover:bg-blue-700 transition-all shadow-sm flex items-center justify-center gap-2"
-              >
-                <ImageIcon size={16} />
-                生成图片
-              </button>
-              <button
-                onClick={cancelImageGeneration}
-                className="w-full py-3 bg-white border border-gray-200 text-gray-600 rounded-xl text-[15px] font-medium hover:bg-gray-50 hover:text-gray-900 transition-all"
-              >
-                取消
-              </button>
             </div>
           </div>
         </div>
